@@ -1,0 +1,32 @@
+{
+  "name": "@fynlo/server",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "lint": "eslint .",
+    "check-types": "tsc --noEmit",
+    "db:migrate": "tsx src/scripts/db-migrate.ts apply",
+    "db:migrate:status": "tsx src/scripts/db-migrate.ts status",
+    "db:migrate:validate": "tsx src/scripts/db-migrate.ts validate"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "eslint": "^10.14.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.72.1"
+  }
+}
