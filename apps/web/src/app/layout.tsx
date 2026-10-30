@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 
 import { Inter } from "next/font/google";
 
+import { AuthProvider } from "@/providers/auth-provider";
 import { FinanceProvider } from "@/providers/finance-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
 
@@ -34,7 +35,9 @@ export default function RootLayout({
           enableSystem={false}
           storageKey="fynlo-theme"
         >
-          <FinanceProvider>{children}</FinanceProvider>
+          <AuthProvider>
+            <FinanceProvider>{children}</FinanceProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

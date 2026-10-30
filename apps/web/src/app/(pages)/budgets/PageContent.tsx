@@ -3,10 +3,11 @@
 import { Badge } from "@fynlo/ui/components/badge";
 import { Button } from "@fynlo/ui/components/button";
 import { Modal } from "@fynlo/ui/components/modal";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Target } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { EmptyState } from "@/components/EmptyState";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { budgetSummary } from "@/utils/finance";
@@ -95,23 +96,29 @@ export default function PageContent() {
         <div className="budget-health">
           <Badge
             tone={
-              remaining < 0
-                ? "danger"
-                : usedPercent > WARNING_AT + 15
-                  ? "warning"
-                  : "success"
+              budgets.length === 0
+                ? "neutral"
+                : remaining < 0
+                  ? "danger"
+                  : usedPercent > WARNING_AT + 15
+                    ? "warning"
+                    : "success"
             }
           >
-            {remaining < 0
-              ? "Over budget"
-              : usedPercent > WARNING_AT + 15
-                ? "Almost used up"
-                : "Healthy budget"}
+            {budgets.length === 0
+              ? "No budgets yet"
+              : remaining < 0
+                ? "Over budget"
+                : usedPercent > WARNING_AT + 15
+                  ? "Almost used up"
+                  : "Healthy budget"}
           </Badge>
           <span>
-            {remaining < 0
-              ? "You have spent more than planned this month."
-              : "Your spending is still in line with this month's plan."}
+            {budgets.length === 0
+              ? "Create a budget to start tracking your spending."
+              : remaining < 0
+                ? "You have spent more than planned this month."
+                : "Your spending is still in line with this month's plan."}
           </span>
         </div>
       </div>
@@ -122,6 +129,15 @@ export default function PageContent() {
           <p>Track the spending limit for each category</p>
         </div>
       </div>
+      {budgets.length === 0 && (
+        <div className="card">
+          <EmptyState
+            description="Set a monthly limit for a category to see it here."
+            icon={Target}
+            title="No budgets yet"
+          />
+        </div>
+      )}
       <div className="budget-grid">
         {budgets.map((budget) => {
           const category = categories.find((c) => c.id === budget.categoryId);

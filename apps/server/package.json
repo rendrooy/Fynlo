@@ -11,17 +11,21 @@
     "check-types": "tsc --noEmit",
     "db:migrate": "tsx src/scripts/db-migrate.ts apply",
     "db:migrate:status": "tsx src/scripts/db-migrate.ts status",
-    "db:migrate:validate": "tsx src/scripts/db-migrate.ts validate"
+    "db:migrate:validate": "tsx src/scripts/db-migrate.ts validate",
+    "user:create": "tsx src/scripts/create-user.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5",
+    "express-rate-limit": "^8.7.2",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.1",
     "pino": "^10.4.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "eslint": "^10.14.0",

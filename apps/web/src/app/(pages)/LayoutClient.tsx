@@ -22,11 +22,11 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode, useEffect, useState } from "react";
 
-import { currentUser } from "@/constants";
 import { useMounted } from "@/hooks";
+import { useAuth } from "@/providers/auth-provider";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { formatMonth } from "@/utils/format";
@@ -51,6 +51,37 @@ const mobileNav = nav.slice(0, 4);
 const moreNav = nav.slice(4);
 
 export default function LayoutClient({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const { refresh, status } = useAuth();
+
+  useEffect(() => {
+    if (status === "anonymous") router.replace("/login");
+  }, [router, status]);
+
+  if (status === "unavailable") {
+    return (
+      <main className="auth-page">
+        <div className="auth-card card">
+          <h1>Can&apos;t reach the server</h1>
+          <p>You are still signed in. Check your connection and try again.</p>
+          <Button onClick={() => void refresh()}>Try again</Button>
+        </div>
+      </main>
+    );
+  }
+  // Nothing private renders until the session is confirmed.
+  if (status !== "authenticated") {
+    return (
+      <main className="auth-page">
+        <p className="auth-loading">Loading...</p>
+      </main>
+    );
+  }
+  return <AppShell>{children}</AppShell>;
+}
+
+function AppShell({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const mounted = useMounted();
   const pathname = usePathname();
   const { openSheet, toast } = useTransactionSheet();
@@ -158,7 +189,7 @@ export default function LayoutClient({ children }: { children: ReactNode }) {
             >
               <Bell aria-hidden="true" size={19} />
             </button>
-            <div className="avatar">{currentUser.initials}</div>
+            <div className="avatar">{user?.initials}</div>
           </div>
         </header>
         {/* Mock data depends on today's date, so it renders only in the browser to avoid differing from the built HTML. */}

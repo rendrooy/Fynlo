@@ -5,6 +5,7 @@ import { Button } from "@fynlo/ui/components/button";
 import { Segmented } from "@fynlo/ui/components/segmented";
 import {
   ArrowDown,
+  ArrowLeftRight,
   ArrowRight,
   ArrowUp,
   ChartColumn,
@@ -18,6 +19,7 @@ import { useState } from "react";
 
 import { CardHeader } from "@/components/CardHeader";
 import { CashflowChart } from "@/components/CashflowChart";
+import { EmptyState } from "@/components/EmptyState";
 import { ExpenseBreakdown } from "@/components/ExpenseBreakdown";
 import { TransactionList } from "@/components/TransactionList";
 import { NOT_AVAILABLE, sourceLabels } from "@/constants";
@@ -57,10 +59,6 @@ export default function PageContent() {
           <h1>{greeting()}</h1>
           <p>Keep an eye on your finances in one place.</p>
         </div>
-        <Badge tone="success">
-          <span className="status-dot" />
-          All data up to date
-        </Badge>
       </div>
 
       <div className="metric-grid">
@@ -153,6 +151,15 @@ export default function PageContent() {
           Add Account
         </Button>
       </div>
+      {accounts.length === 0 && (
+        <div className="card">
+          <EmptyState
+            description="Your accounts and balances will appear here."
+            icon={Wallet}
+            title="No accounts yet"
+          />
+        </div>
+      )}
       <div className="accounts-grid">
         {accounts.map((account) => {
           const latest = sortNewestFirst(
@@ -209,7 +216,15 @@ export default function PageContent() {
             subtitle="Latest activity across all accounts"
             title="Recent Transactions"
           />
-          <TransactionList items={recent} />
+          {recent.length > 0 ? (
+            <TransactionList items={recent} />
+          ) : (
+            <EmptyState
+              description="Your latest activity will appear here."
+              icon={ArrowLeftRight}
+              title="No transactions yet"
+            />
+          )}
         </section>
         <aside className="insight-card">
           <div className="insight-top">
@@ -239,6 +254,11 @@ export default function PageContent() {
                   />
                 ))}
               </div>
+            </>
+          ) : transactions.length === 0 ? (
+            <>
+              <h3>No insights yet</h3>
+              <p>Insights appear once you have recorded some transactions.</p>
             </>
           ) : (
             <>
@@ -291,11 +311,15 @@ function MetricCard({
       </div>
       <div className="metric-value">{value}</div>
       <div className="metric-foot">
-        <Badge tone={up === goodWhenUp ? "success" : "danger"}>
-          <Arrow aria-hidden="true" size={12} />
-          {up ? "+" : ""}
-          {change}%
-        </Badge>
+        {change === 0 ? (
+          <Badge>0%</Badge>
+        ) : (
+          <Badge tone={up === goodWhenUp ? "success" : "danger"}>
+            <Arrow aria-hidden="true" size={12} />
+            {up ? "+" : ""}
+            {change}%
+          </Badge>
+        )}
         <span>{helper}</span>
       </div>
     </div>

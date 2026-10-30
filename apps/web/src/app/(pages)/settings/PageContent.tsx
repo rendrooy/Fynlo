@@ -9,6 +9,7 @@ import {
   Download,
   Link2,
   ListFilter,
+  LogOut,
   type LucideIcon,
   Moon,
   Settings,
@@ -19,7 +20,8 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
-import { currentUser, NOT_AVAILABLE } from "@/constants";
+import { NOT_AVAILABLE } from "@/constants";
+import { useAuth } from "@/providers/auth-provider";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 
@@ -34,6 +36,7 @@ interface SettingsItem {
 }
 
 export default function PageContent() {
+  const { signOut, user } = useAuth();
   const { accounts, categories } = useFinance();
   const { toast } = useTransactionSheet();
   const { setTheme, theme } = useTheme();
@@ -43,7 +46,7 @@ export default function PageContent() {
     {
       items: [
         {
-          description: `${currentUser.name} · ${currentUser.email}`,
+          description: `${user?.name} · ${user?.email}`,
           icon: Settings,
           title: "Personal profile",
           value: "IDR",
@@ -59,6 +62,12 @@ export default function PageContent() {
           icon: ListFilter,
           title: "Transaction categories",
           value: `${categories.length} categories`,
+        },
+        {
+          action: signOut,
+          description: "Sign out of Fynlo on this device",
+          icon: LogOut,
+          title: "Sign out",
         },
       ],
       title: "Account",
@@ -127,10 +136,10 @@ export default function PageContent() {
       </div>
 
       <div className="settings-profile card">
-        <div className="avatar large">{currentUser.initials}</div>
+        <div className="avatar large">{user?.initials}</div>
         <div>
-          <b>{currentUser.name}</b>
-          <span>{currentUser.email}</span>
+          <b>{user?.name}</b>
+          <span>{user?.email}</span>
         </div>
         <Button kind="secondary" onClick={() => toast(NOT_AVAILABLE)}>
           Manage Profile

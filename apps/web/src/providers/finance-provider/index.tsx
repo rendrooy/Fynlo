@@ -1,6 +1,11 @@
 "use client";
 
-import type { BudgetInterface, TransactionInterface } from "@fynlo/types";
+import type {
+  AccountInterface,
+  AssetInterface,
+  BudgetInterface,
+  TransactionInterface,
+} from "@fynlo/types";
 
 import {
   createContext,
@@ -11,20 +16,18 @@ import {
   useState,
 } from "react";
 
-import {
-  accounts,
-  assets,
-  categories,
-  budgets as seedBudgets,
-  seedTransactions,
-} from "@/constants/mock-data";
+import { defaultCategories as categories } from "@/constants";
 
 export type NewTransaction = Omit<TransactionInterface, "id">;
 
+// Stay empty until the API is connected.
+const accounts: AccountInterface[] = [];
+const assets: AssetInterface[] = [];
+
 interface FinanceValue {
-  accounts: typeof accounts;
+  accounts: AccountInterface[];
   addTransaction: (transaction: NewTransaction) => void;
-  assets: typeof assets;
+  assets: AssetInterface[];
   budgets: BudgetInterface[];
   categories: typeof categories;
   deleteTransaction: (id: string) => void;
@@ -36,8 +39,8 @@ interface FinanceValue {
 const FinanceContext = createContext<FinanceValue | null>(null);
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const [transactions, setTransactions] = useState(seedTransactions);
-  const [budgets, setBudgets] = useState(seedBudgets);
+  const [transactions, setTransactions] = useState<TransactionInterface[]>([]);
+  const [budgets, setBudgets] = useState<BudgetInterface[]>([]);
 
   const addTransaction = useCallback((transaction: NewTransaction) => {
     setTransactions((current) => [

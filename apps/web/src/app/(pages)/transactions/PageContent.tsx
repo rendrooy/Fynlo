@@ -2,9 +2,10 @@
 
 import { Button } from "@fynlo/ui/components/button";
 import { Segmented } from "@fynlo/ui/components/segmented";
-import { Download, Plus, Search } from "lucide-react";
+import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { EmptyState } from "@/components/EmptyState";
 import { TransactionList } from "@/components/TransactionList";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
@@ -167,14 +168,18 @@ export default function PageContent() {
         </div>
         {visible.length > 0 ? (
           <TransactionList items={visible} />
+        ) : transactions.length === 0 ? (
+          <EmptyState
+            description="Transactions you record will appear here."
+            icon={ArrowLeftRight}
+            title="No transactions yet"
+          />
         ) : (
-          <div className="empty">
-            <div>
-              <Search aria-hidden="true" size={20} />
-            </div>
-            <b>No matching transactions</b>
-            <span>Try a different keyword or filter.</span>
-          </div>
+          <EmptyState
+            description="Try a different keyword or filter."
+            icon={Search}
+            title="No matching transactions"
+          />
         )}
         <div className="pagination">
           <span>

@@ -13,9 +13,11 @@ import {
   type LucideIcon,
   Plus,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { useState } from "react";
 
+import { EmptyState } from "@/components/EmptyState";
 import {
   accountKinds,
   assetKinds,
@@ -99,6 +101,15 @@ export default function PageContent() {
           <p>{accounts.length} sources of funds tracked</p>
         </div>
       </div>
+      {accounts.length === 0 && (
+        <div className="card">
+          <EmptyState
+            description="Accounts you track will appear here."
+            icon={Wallet}
+            title="No accounts yet"
+          />
+        </div>
+      )}
       <div className="account-management-grid">
         {accounts.map((account) => {
           const isExcluded = excluded.includes(account.id);
@@ -177,6 +188,15 @@ export default function PageContent() {
           <p>Worth {formatRupiah(assetTotal)} in total</p>
         </div>
       </div>
+      {assets.length === 0 && (
+        <div className="card">
+          <EmptyState
+            description="Investments, gold, and property you own will appear here."
+            icon={Coins}
+            title="No assets yet"
+          />
+        </div>
+      )}
       <div className="assets-grid">
         {assets.map((asset) => {
           const Icon = assetIcons[asset.kind];

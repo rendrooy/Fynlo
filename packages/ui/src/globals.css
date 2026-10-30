@@ -80,3 +80,17 @@ dialog::backdrop{background:rgba(15,23,42,.42);backdrop-filter:blur(3px)}
 .dark .badge.danger{color:#fda4af;background:rgba(244,63,94,.15)}
 .dark .nav-item i{color:#fda4af;background:rgba(244,63,94,.15)}
 .dark .illustration{background:rgba(5,150,105,.15);color:#6ee7b7}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+.modal .notice{margin:0 0 14px}
+.auth-page{min-height:100dvh;display:grid;place-items:center;padding:20px;background:var(--bg);color:var(--text)}
+.auth-loading{color:var(--muted);font-size:13px}
+.auth-card{width:min(400px,100%);padding:28px}
+.auth-brand{padding:0;height:auto;margin-bottom:24px}
+.auth-card h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin:0 0 4px}
+.auth-card>p{color:var(--muted);font-size:13px;margin:0 0 20px}
+.auth-card label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:500;margin-bottom:14px}
+.auth-card form .btn,.auth-card>.btn{width:100%;height:42px}
+.auth-card .field-error{margin:0 0 12px}
+.auth-password{position:relative;display:block}
+.auth-password input{padding-right:42px}
+.auth-password button{position:absolute;top:0;right:0;width:40px;height:39px;display:grid;place-items:center;background:none;border:0;color:var(--muted)}

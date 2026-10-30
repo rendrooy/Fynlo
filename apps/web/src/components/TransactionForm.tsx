@@ -3,6 +3,7 @@
 import type { TransactionInterface, TransactionType } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
+import { Info } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { useFinance } from "@/providers/finance-provider";
@@ -42,7 +43,7 @@ export function TransactionForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    if (amount <= 0 || !categoryId || !date) return;
+    if (amount <= 0 || !accountId || !categoryId || !date) return;
     const categoryName = categories.find((c) => c.id === categoryId)?.name;
     const values = {
       accountId,
@@ -70,6 +71,15 @@ export function TransactionForm({
 
   return (
     <form noValidate onSubmit={submit}>
+      {accounts.length === 0 && (
+        <div className="notice">
+          <Info aria-hidden="true" size={20} />
+          <div>
+            <b>Add an account first</b>
+            <span>Every transaction has to belong to an account.</span>
+          </div>
+        </div>
+      )}
       <div aria-label="Transaction type" className="type-tabs" role="group">
         {(["expense", "income"] as const).map((option) => (
           <button
@@ -167,7 +177,9 @@ export function TransactionForm({
         <Button kind="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">Save Transaction</Button>
+        <Button disabled={accounts.length === 0} type="submit">
+          Save Transaction
+        </Button>
       </div>
     </form>
   );
