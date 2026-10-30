@@ -33,11 +33,25 @@ export interface BudgetInterface {
   limit: number;
 }
 
-export interface CategoryInterface {
-  color: string;
-  icon: string;
+export interface CategoryGroupInterface {
+  categoryCount: number;
   id: string;
   name: string;
+  type: TransactionType;
+}
+
+export interface CategoryInputInterface {
+  color: string;
+  groupId: string;
+  icon: string;
+  name: string;
+}
+
+export interface CategoryInterface extends CategoryInputInterface {
+  groupName: string;
+  id: string;
+  /** True while a transaction or budget still points to this category. */
+  inUse: boolean;
   type: TransactionType;
 }
 

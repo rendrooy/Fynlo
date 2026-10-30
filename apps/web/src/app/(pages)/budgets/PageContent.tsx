@@ -7,6 +7,7 @@ import { Pencil, Plus, Target } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { CategoryOptions } from "@/components/CategoryOptions";
 import { EmptyState } from "@/components/EmptyState";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
@@ -208,11 +209,7 @@ export default function PageContent() {
                 value={editing.categoryId}
               >
                 <option value="">Choose a category</option>
-                {expenseCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
+                <CategoryOptions categories={expenseCategories} />
               </select>
               {submitted && !editing.categoryId && (
                 <span className="field-error">Choose a category</span>

@@ -10,6 +10,8 @@ import { useFinance } from "@/providers/finance-provider";
 import { accountLabel } from "@/utils/finance";
 import { formatGrouped, toIsoDate } from "@/utils/format";
 
+import { CategoryOptions } from "./CategoryOptions";
+
 export function TransactionForm({
   defaultType = "expense",
   editing,
@@ -157,11 +159,7 @@ export function TransactionForm({
             value={categoryId}
           >
             <option value="">Choose a category</option>
-            {options.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
+            <CategoryOptions categories={options} />
           </select>
           {submitted && !categoryId && (
             <span className="field-error">Choose a category</span>

@@ -114,4 +114,8 @@ dialog::backdrop{background:rgba(15,23,42,.42);backdrop-filter:blur(3px)}
 .manage-copy b{font-size:13px}.manage-copy span{font-size:11px;color:var(--muted)}
 .manage-row>strong{font-size:14px;white-space:nowrap}
 .page-intro .btn{flex:none}
+.color-field button.tx-icon{width:36px;height:36px;border-radius:10px}
+.category-group{margin-bottom:14px}
+.category-group-head{background:var(--surface-2)}
+@media(max-width:800px){.category-group .manage-row:not(.category-group-head) .account-actions{width:auto;margin-left:auto}.category-group .manage-row:not(.category-group-head) .manage-copy{min-width:90px}}
 @media(max-width:800px){.manage-row .account-actions{width:100%;justify-content:flex-end}.page-intro>.btn{height:34px;padding:0 10px}}

@@ -5,6 +5,7 @@ import { Segmented } from "@fynlo/ui/components/segmented";
 import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { CategoryOptions } from "@/components/CategoryOptions";
 import { EmptyState } from "@/components/EmptyState";
 import { TransactionList } from "@/components/TransactionList";
 import { useFinance } from "@/providers/finance-provider";
@@ -127,13 +128,11 @@ export default function PageContent() {
           value={categoryId}
         >
           <option value="all">All categories</option>
-          {categories
-            .filter((c) => type === "all" || c.type === type)
-            .map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
+          <CategoryOptions
+            categories={categories.filter(
+              (c) => type === "all" || c.type === type,
+            )}
+          />
         </select>
       </div>
 

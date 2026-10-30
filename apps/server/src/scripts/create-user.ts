@@ -2,6 +2,10 @@ import { createInterface } from "node:readline";
 
 import { pool } from "../connection/db";
 import { DEFAULT_ACCOUNT_TYPES } from "../services/account-type-service";
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_CATEGORY_GROUPS,
+} from "../services/category-group-service";
 import { hashPassword } from "../utils/password";
 
 const MIN_PASSWORD_LENGTH = 12;
@@ -64,23 +68,40 @@ async function main() {
     );
   }
 
-  // A single statement, so a user can never exist without default account types.
+  // A single statement, so a user can never exist without their starter data.
   const { rowCount } = await pool.query(
     `WITH new_user AS (
        INSERT INTO m_user (email, password_hash, name, initials)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (email) DO NOTHING
        RETURNING id
+     ),
+     new_types AS (
+       INSERT INTO m_account_type (user_id, name)
+       SELECT new_user.id, type_name
+       FROM new_user CROSS JOIN unnest($5::text[]) AS type_name
+     ),
+     new_groups AS (
+       INSERT INTO m_category_group (user_id, name, type)
+       SELECT new_user.id, g.name, g.type
+       FROM new_user
+       CROSS JOIN jsonb_to_recordset($6::jsonb) AS g (name text, type text)
+       RETURNING id, user_id, name, type
      )
-     INSERT INTO m_account_type (user_id, name)
-     SELECT new_user.id, type_name
-     FROM new_user CROSS JOIN unnest($5::text[]) AS type_name`,
+     INSERT INTO m_category (user_id, group_id, name, type, icon, color)
+     SELECT g.user_id, g.id, c.name, g.type, c.icon, c.color
+     FROM new_groups g
+     JOIN jsonb_to_recordset($7::jsonb)
+       AS c ("group" text, name text, icon text, color text)
+       ON c."group" = g.name`,
     [
       email,
       await hashPassword(password),
       name,
       initialsOf(name),
       DEFAULT_ACCOUNT_TYPES,
+      JSON.stringify(DEFAULT_CATEGORY_GROUPS),
+      JSON.stringify(DEFAULT_CATEGORIES),
     ],
   );
   if (!rowCount) throw new Error(`User already exists: ${email}`);

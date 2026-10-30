@@ -6,7 +6,11 @@ import type {
   AccountTypeInterface,
   AssetInterface,
   BudgetInterface,
+  CategoryGroupInterface,
+  CategoryInputInterface,
+  CategoryInterface,
   TransactionInterface,
+  TransactionType,
 } from "@fynlo/types";
 
 import {
@@ -19,17 +23,24 @@ import {
   useState,
 } from "react";
 
-import { defaultCategories as categories } from "@/constants";
 import { useAuth } from "@/providers/auth-provider";
 import {
   createAccountRequest,
   createAccountTypeRequest,
+  createCategoryGroupRequest,
+  createCategoryRequest,
   deleteAccountRequest,
   deleteAccountTypeRequest,
+  deleteCategoryGroupRequest,
+  deleteCategoryRequest,
   listAccountsRequest,
   listAccountTypesRequest,
+  listCategoriesRequest,
+  listCategoryGroupsRequest,
   renameAccountTypeRequest,
+  renameCategoryGroupRequest,
   updateAccountRequest,
+  updateCategoryRequest,
 } from "@/services/api";
 
 export type LoadStatus = "error" | "loading" | "ready";
@@ -45,19 +56,31 @@ interface FinanceValue {
   addTransaction: (transaction: NewTransaction) => void;
   assets: AssetInterface[];
   budgets: BudgetInterface[];
-  categories: typeof categories;
+  categories: CategoryInterface[];
+  categoriesStatus: LoadStatus;
+  categoryGroups: CategoryGroupInterface[];
   createAccount: (input: AccountInputInterface) => Promise<void>;
   createAccountType: (name: string) => Promise<void>;
+  createCategory: (input: CategoryInputInterface) => Promise<void>;
+  createCategoryGroup: (name: string, type: TransactionType) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;
   deleteAccountType: (id: string) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  deleteCategoryGroup: (id: string) => Promise<void>;
   deleteTransaction: (id: string) => void;
   loadAccounts: () => Promise<void>;
+  loadCategories: () => Promise<void>;
   renameAccountType: (id: string, name: string) => Promise<void>;
+  renameCategoryGroup: (id: string, name: string) => Promise<void>;
   saveBudget: (budget: BudgetInterface) => void;
   transactions: TransactionInterface[];
   updateAccount: (
     id: string,
     changes: Partial<AccountInputInterface> & { isExcluded?: boolean },
+  ) => Promise<void>;
+  updateCategory: (
+    id: string,
+    changes: Partial<CategoryInputInterface>,
   ) => Promise<void>;
   updateTransaction: (id: string, changes: Partial<NewTransaction>) => void;
 }
@@ -69,6 +92,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<AccountInterface[]>([]);
   const [accountsStatus, setAccountsStatus] = useState<LoadStatus>("loading");
   const [accountTypes, setAccountTypes] = useState<AccountTypeInterface[]>([]);
+  const [categories, setCategories] = useState<CategoryInterface[]>([]);
+  const [categoriesStatus, setCategoriesStatus] =
+    useState<LoadStatus>("loading");
+  const [categoryGroups, setCategoryGroups] = useState<
+    CategoryGroupInterface[]
+  >([]);
   const [transactions, setTransactions] = useState<TransactionInterface[]>([]);
   const [budgets, setBudgets] = useState<BudgetInterface[]>([]);
 
@@ -87,18 +116,91 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // The list is ordered by the server, and moving a category changes group counts.
+  const refreshCategories = useCallback(async () => {
+    const [loadedCategories, loadedGroups] = await Promise.all([
+      listCategoriesRequest(),
+      listCategoryGroupsRequest(),
+    ]);
+    setCategories(loadedCategories);
+    setCategoryGroups(loadedGroups);
+  }, []);
+
+  const loadCategories = useCallback(async () => {
+    setCategoriesStatus("loading");
+    try {
+      await refreshCategories();
+      setCategoriesStatus("ready");
+    } catch {
+      setCategoriesStatus("error");
+    }
+  }, [refreshCategories]);
+
   useEffect(() => {
     if (status === "authenticated") {
       void loadAccounts();
+      void loadCategories();
     } else if (status === "anonymous") {
       // Financial data must not outlive the session.
       setAccounts([]);
       setAccountTypes([]);
       setAccountsStatus("loading");
+      setCategories([]);
+      setCategoryGroups([]);
+      setCategoriesStatus("loading");
       setTransactions([]);
       setBudgets([]);
     }
-  }, [loadAccounts, status]);
+  }, [loadAccounts, loadCategories, status]);
+
+  const createCategory = useCallback(
+    async (input: CategoryInputInterface) => {
+      await createCategoryRequest(input);
+      await refreshCategories();
+    },
+    [refreshCategories],
+  );
+
+  const updateCategory = useCallback(
+    async (id: string, changes: Partial<CategoryInputInterface>) => {
+      await updateCategoryRequest(id, changes);
+      await refreshCategories();
+    },
+    [refreshCategories],
+  );
+
+  const deleteCategory = useCallback(
+    async (id: string) => {
+      await deleteCategoryRequest(id);
+      await refreshCategories();
+    },
+    [refreshCategories],
+  );
+
+  const createCategoryGroup = useCallback(
+    async (name: string, type: TransactionType) => {
+      const group = await createCategoryGroupRequest(name, type);
+      setCategoryGroups((current) => [...current, group]);
+    },
+    [],
+  );
+
+  const renameCategoryGroup = useCallback(async (id: string, name: string) => {
+    const group = await renameCategoryGroupRequest(id, name);
+    setCategoryGroups((current) =>
+      current.map((g) => (g.id === id ? group : g)),
+    );
+    setCategories((current) =>
+      current.map((c) =>
+        c.groupId === id ? { ...c, groupName: group.name } : c,
+      ),
+    );
+  }, []);
+
+  const deleteCategoryGroup = useCallback(async (id: string) => {
+    await deleteCategoryGroupRequest(id);
+    setCategoryGroups((current) => current.filter((g) => g.id !== id));
+  }, []);
 
   const createAccount = useCallback(async (input: AccountInputInterface) => {
     const account = await createAccountRequest(input);
@@ -181,16 +283,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       assets,
       budgets,
       categories,
+      categoriesStatus,
+      categoryGroups,
       createAccount,
       createAccountType,
+      createCategory,
+      createCategoryGroup,
       deleteAccount,
       deleteAccountType,
+      deleteCategory,
+      deleteCategoryGroup,
       deleteTransaction,
       loadAccounts,
+      loadCategories,
       renameAccountType,
+      renameCategoryGroup,
       saveBudget,
       transactions,
       updateAccount,
+      updateCategory,
       updateTransaction,
     }),
     [
@@ -199,16 +310,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       accountTypes,
       addTransaction,
       budgets,
+      categories,
+      categoriesStatus,
+      categoryGroups,
       createAccount,
       createAccountType,
+      createCategory,
+      createCategoryGroup,
       deleteAccount,
       deleteAccountType,
+      deleteCategory,
+      deleteCategoryGroup,
       deleteTransaction,
       loadAccounts,
+      loadCategories,
       renameAccountType,
+      renameCategoryGroup,
       saveBudget,
       transactions,
       updateAccount,
+      updateCategory,
       updateTransaction,
     ],
   );

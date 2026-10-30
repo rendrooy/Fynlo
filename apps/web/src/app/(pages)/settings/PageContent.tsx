@@ -61,10 +61,11 @@ export default function PageContent() {
           value: `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`,
         },
         {
-          description: "Set names, icons, and categorization rules",
+          action: () => router.push("/settings/categories"),
+          description: "Organize your categories and their groups",
           icon: ListFilter,
           title: "Transaction categories",
-          value: `${categories.length} categories`,
+          value: `${categories.length} ${categories.length === 1 ? "category" : "categories"}`,
         },
         {
           action: signOut,

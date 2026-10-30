@@ -7,6 +7,8 @@ erDiagram
     m_account_type ||--o{ m_account : groups
     m_user ||--o{ m_asset : owns
     m_user ||--o{ m_category : owns
+    m_user ||--o{ m_category_group : defines
+    m_category_group ||--o{ m_category : groups
     m_user ||--o{ m_budget : sets
     m_user ||--o{ t_transaction : records
     m_account ||--o{ t_transaction : "holds"
@@ -58,9 +60,20 @@ erDiagram
         timestamptz updated_time
     }
 
+    m_category_group {
+        uuid id PK
+        uuid user_id FK
+        varchar name
+        varchar type "expense, income"
+        boolean is_deleted
+        timestamptz created_time
+        timestamptz updated_time
+    }
+
     m_category {
         uuid id PK
         uuid user_id FK
+        uuid group_id FK
         varchar name
         varchar type "expense, income"
         varchar icon
@@ -102,7 +115,9 @@ erDiagram
 - `amount`, `value`, `opening_balance`, and `limit_amount` use `numeric(18,2)`.
 - Account balance is not stored. It is `opening_balance` plus income minus expenses, counting only transactions where `is_deleted` is false.
 - Account types belong to one user and their names are unique per user. A type cannot be deleted while accounts still use it.
+- Category groups belong to one user and have a type. Their names are unique per user and type. A group cannot be deleted while categories still use it.
+- A category takes its `type` from its group, and can only move to a group of the same type. It cannot be deleted while a transaction or budget still uses it.
 - A budget repeats every month, and each category has at most one.
 - A budget can only point to an `expense` category, and `t_transaction.type` must match its category's `type`. The services enforce both rules.
 - Every table except `m_user` carries `user_id`. Queries must always filter by it.
-- `is_deleted` keeps accounts, account types, assets, categories, and transactions recoverable. Budgets are deleted outright.
+- `is_deleted` keeps accounts, account types, assets, categories, category groups, and transactions recoverable. Budgets are deleted outright.

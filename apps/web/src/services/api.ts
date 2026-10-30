@@ -3,7 +3,11 @@ import type {
   AccountInterface,
   AccountTypeInterface,
   AuthUserInterface,
+  CategoryGroupInterface,
+  CategoryInputInterface,
+  CategoryInterface,
   LoginResponseInterface,
+  TransactionType,
 } from "@fynlo/types";
 
 import {
@@ -104,3 +108,45 @@ export const updateAccountRequest = (
 
 export const deleteAccountRequest = (id: string) =>
   request<undefined>(`/accounts/${id}`, { method: "DELETE" });
+
+export const listCategoryGroupsRequest = () =>
+  request<CategoryGroupInterface[]>("/category-groups");
+
+export const createCategoryGroupRequest = (
+  name: string,
+  type: TransactionType,
+) =>
+  request<CategoryGroupInterface>("/category-groups", {
+    body: JSON.stringify({ name, type }),
+    method: "POST",
+  });
+
+export const renameCategoryGroupRequest = (id: string, name: string) =>
+  request<CategoryGroupInterface>(`/category-groups/${id}`, {
+    body: JSON.stringify({ name }),
+    method: "PATCH",
+  });
+
+export const deleteCategoryGroupRequest = (id: string) =>
+  request<undefined>(`/category-groups/${id}`, { method: "DELETE" });
+
+export const listCategoriesRequest = () =>
+  request<CategoryInterface[]>("/categories");
+
+export const createCategoryRequest = (input: CategoryInputInterface) =>
+  request<CategoryInterface>("/categories", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const updateCategoryRequest = (
+  id: string,
+  changes: Partial<CategoryInputInterface>,
+) =>
+  request<CategoryInterface>(`/categories/${id}`, {
+    body: JSON.stringify(changes),
+    method: "PATCH",
+  });
+
+export const deleteCategoryRequest = (id: string) =>
+  request<undefined>(`/categories/${id}`, { method: "DELETE" });

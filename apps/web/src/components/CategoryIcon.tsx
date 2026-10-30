@@ -24,6 +24,8 @@ const icons: Record<string, LucideIcon> = {
   wallet: Wallet,
 };
 
+export const categoryIconNames = Object.keys(icons);
+
 export function CategoryIcon({
   className = "size-5",
   icon,
