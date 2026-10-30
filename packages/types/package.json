@@ -1,0 +1,12 @@
+{
+  "name": "@fynlo/types",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "eslint .",
+    "check-types": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

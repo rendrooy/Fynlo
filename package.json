@@ -1,0 +1,33 @@
+{
+  "name": "fynlo",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint --continue --",
+    "check-types": "turbo check-types",
+    "format": "prettier --write \"**/*.{ts,tsx,css,json,mjs}\"",
+    "clean": "turbo clean"
+  },
+  "packageManager": "pnpm@9.12.1",
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.5",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-only-warn": "^1.2.1",
+    "eslint-plugin-perfectionist": "^5.13.0",
+    "eslint-plugin-prettier": "^5.5.7",
+    "globals": "^17.13.0",
+    "jiti": "^2.7.0",
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}
