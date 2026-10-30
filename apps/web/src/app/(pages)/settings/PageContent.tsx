@@ -9,6 +9,7 @@ import {
   Download,
   Link2,
   ListFilter,
+  LogOut,
   type LucideIcon,
   Moon,
   Settings,
@@ -18,8 +19,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 
-import { currentUser, NOT_AVAILABLE } from "@/constants";
+import { NOT_AVAILABLE } from "@/constants";
+import { useAuth } from "@/providers/auth-provider";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 
@@ -34,6 +37,8 @@ interface SettingsItem {
 }
 
 export default function PageContent() {
+  const router = useRouter();
+  const { signOut, user } = useAuth();
   const { accounts, categories } = useFinance();
   const { toast } = useTransactionSheet();
   const { setTheme, theme } = useTheme();
@@ -43,22 +48,30 @@ export default function PageContent() {
     {
       items: [
         {
-          description: `${currentUser.name} · ${currentUser.email}`,
+          description: `${user?.name} · ${user?.email}`,
           icon: Settings,
           title: "Personal profile",
           value: "IDR",
         },
         {
-          description: "Manage aliases, masks, and tracking sources",
+          action: () => router.push("/settings/accounts"),
+          description: "Add and edit your accounts and their types",
           icon: Wallet,
-          title: "Tracked accounts",
-          value: `${accounts.length} accounts`,
+          title: "Accounts & types",
+          value: `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`,
         },
         {
-          description: "Set names, icons, and categorization rules",
+          action: () => router.push("/settings/categories"),
+          description: "Organize your categories and their groups",
           icon: ListFilter,
           title: "Transaction categories",
-          value: `${categories.length} categories`,
+          value: `${categories.length} ${categories.length === 1 ? "category" : "categories"}`,
+        },
+        {
+          action: signOut,
+          description: "Sign out of Fynlo on this device",
+          icon: LogOut,
+          title: "Sign out",
         },
       ],
       title: "Account",
@@ -127,10 +140,10 @@ export default function PageContent() {
       </div>
 
       <div className="settings-profile card">
-        <div className="avatar large">{currentUser.initials}</div>
+        <div className="avatar large">{user?.initials}</div>
         <div>
-          <b>{currentUser.name}</b>
-          <span>{currentUser.email}</span>
+          <b>{user?.name}</b>
+          <span>{user?.email}</span>
         </div>
         <Button kind="secondary" onClick={() => toast(NOT_AVAILABLE)}>
           Manage Profile

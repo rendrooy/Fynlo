@@ -1,14 +1,23 @@
-export interface AccountInterface {
+export interface AccountInputInterface {
+  accountTypeId: string;
   color: string;
-  id: string;
-  kind: AccountKind;
-  mask: string;
+  mask: null | string;
   name: string;
   openingBalance: number;
-  source: TransactionSource;
 }
 
-export type AccountKind = "bank" | "cash" | "ewallet";
+export interface AccountInterface extends AccountInputInterface {
+  id: string;
+  isExcluded: boolean;
+  source: TransactionSource;
+  typeName: string;
+}
+
+export interface AccountTypeInterface {
+  accountCount: number;
+  id: string;
+  name: string;
+}
 
 export interface AssetInterface {
   id: string;
@@ -24,32 +33,94 @@ export interface BudgetInterface {
   limit: number;
 }
 
-export interface CategoryInterface {
-  color: string;
-  icon: string;
+export interface CategoryGroupInterface {
+  categoryCount: number;
   id: string;
   name: string;
-  type: TransactionType;
+  type: CategoryType;
 }
 
-export interface TransactionInterface {
+export interface CategoryInputInterface {
+  color: string;
+  groupId: string;
+  icon: string;
+  name: string;
+}
+
+export interface CategoryInterface extends CategoryInputInterface {
+  groupName: string;
+  id: string;
+  /** True while a transaction or budget still points to this category. */
+  inUse: boolean;
+  type: CategoryType;
+}
+
+export type CategoryType = "expense" | "income";
+
+export interface StatementImportInterface {
+  accountId: string;
+  openingBalance: null | number;
+  rows: (Omit<StatementRowInterface, "isDuplicate" | "isPossibleTransfer"> & {
+    /** The other account, when this row is a transfer between own accounts. */
+    transferAccountId: null | string;
+  })[];
+}
+
+export interface StatementPreviewInterface {
+  accountMask: null | string;
+  /** True when no saved transaction is older than this statement. */
+  canSetOpeningBalance: boolean;
+  closingBalance: number;
+  isDifferentAccount: boolean;
+  openingBalance: number;
+  rows: StatementRowInterface[];
+}
+
+export interface StatementRowInterface {
+  amount: number;
+  categoryId: null | string;
+  date: string;
+  detail: string;
+  isDuplicate: boolean;
+  /** The description carries the owner's own name. */
+  isPossibleTransfer: boolean;
+  name: string;
+  /** Time in HH:mm:ss format. */
+  time: string;
+  /** The direction of the money in this statement's account. */
+  type: CategoryType;
+}
+
+export interface TransactionInputInterface {
+  /** The source account of a transfer. */
   accountId: string;
   amount: number;
-  categoryId: string;
+  categoryId?: null | string;
   /** Local date in YYYY-MM-DD format. */
   date: string;
   detail: string;
-  id: string;
   name: string;
-  source: TransactionSource;
-  status: TransactionStatus;
   /** Local time in HH:mm format. */
   time: string;
+  /** Set only on a transfer between own accounts. */
+  toAccountId?: null | string;
+}
+
+export interface TransactionInterface extends Omit<
+  TransactionInputInterface,
+  "categoryId"
+> {
+  /** Null on transfers, and until an imported transaction is given a category. */
+  categoryId: null | string;
+  id: string;
+  source: TransactionSource;
+  status: TransactionStatus;
+  toAccountId: null | string;
   type: TransactionType;
 }
 
-export type TransactionSource = "email" | "manual" | "shortcut";
+export type TransactionSource = "email" | "import" | "manual" | "shortcut";
 
 export type TransactionStatus = "review" | "verified";
 
-export type TransactionType = "expense" | "income";
+export type TransactionType = "transfer" | CategoryType;

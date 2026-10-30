@@ -2,20 +2,24 @@
 
 import { Button } from "@fynlo/ui/components/button";
 import { Segmented } from "@fynlo/ui/components/segmented";
-import { Download, Plus, Search } from "lucide-react";
+import { Select } from "@fynlo/ui/components/select";
+import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { EmptyState } from "@/components/EmptyState";
 import { TransactionList } from "@/components/TransactionList";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
-import { sortNewestFirst } from "@/utils/finance";
+import { categoryOptions } from "@/utils/category-options";
+import { sortNewestFirst, touchesAccount } from "@/utils/finance";
 
-type TypeFilter = "all" | "expense" | "income";
+type TypeFilter = "all" | "expense" | "income" | "transfer";
 
 const PAGE_SIZE = 10;
 
 export default function PageContent() {
-  const { accounts, categories, transactions } = useFinance();
+  const { accounts, categories, transactions, transactionsStatus } =
+    useFinance();
   const { openSheet, toast } = useTransactionSheet();
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TypeFilter>("all");
@@ -29,7 +33,7 @@ export default function PageContent() {
       const category = categories.find((c) => c.id === t.categoryId);
       return (
         (type === "all" || t.type === type) &&
-        (accountId === "all" || t.accountId === accountId) &&
+        (accountId === "all" || touchesAccount(t, accountId)) &&
         (categoryId === "all" || t.categoryId === categoryId) &&
         (!needle ||
           `${t.name} ${t.detail} ${category?.name}`
@@ -55,6 +59,7 @@ export default function PageContent() {
         t.detail,
         categories.find((c) => c.id === t.categoryId)?.name ?? "",
         accounts.find((a) => a.id === t.accountId)?.name ?? "",
+        accounts.find((a) => a.id === t.toAccountId)?.name ?? "",
         t.type,
         t.amount,
       ]
@@ -62,7 +67,7 @@ export default function PageContent() {
         .join(","),
     );
     const csv = [
-      "date,time,name,detail,category,account,type,amount",
+      "date,time,name,detail,category,account,to_account,type,amount",
       ...rows,
     ].join("\n");
     const link = document.createElement("a");
@@ -100,40 +105,37 @@ export default function PageContent() {
             value={query}
           />
         </div>
-        <select
+        <Select
           aria-label="Filter by account"
           className="select-filter"
-          onChange={(event) => {
-            setAccountId(event.target.value);
+          onChange={(next) => {
+            setAccountId(next);
             setPage(0);
           }}
+          options={[
+            { label: "All accounts", value: "all" },
+            ...accounts.map((account) => ({
+              label: account.name,
+              value: account.id,
+            })),
+          ]}
           value={accountId}
-        >
-          <option value="all">All accounts</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-        <select
+        />
+        <Select
           aria-label="Filter by category"
           className="select-filter"
-          onChange={(event) => {
-            setCategoryId(event.target.value);
+          onChange={(next) => {
+            setCategoryId(next);
             setPage(0);
           }}
+          options={[
+            { label: "All categories", value: "all" },
+            ...categoryOptions(
+              categories.filter((c) => type === "all" || c.type === type),
+            ),
+          ]}
           value={categoryId}
-        >
-          <option value="all">All categories</option>
-          {categories
-            .filter((c) => type === "all" || c.type === type)
-            .map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-        </select>
+        />
       </div>
 
       <div className="list-toolbar">
@@ -151,10 +153,14 @@ export default function PageContent() {
             { label: "All", value: "all" },
             { label: "Income", value: "income" },
             { label: "Expenses", value: "expense" },
+            { label: "Transfers", value: "transfer" },
           ]}
           value={type}
         />
-        <span>{filtered.length} transactions</span>
+        <span>
+          {filtered.length}{" "}
+          {filtered.length === 1 ? "transaction" : "transactions"}
+        </span>
       </div>
 
       <section className="card table-card">
@@ -167,14 +173,22 @@ export default function PageContent() {
         </div>
         {visible.length > 0 ? (
           <TransactionList items={visible} />
-        ) : (
+        ) : transactionsStatus === "loading" ? (
           <div className="empty">
-            <div>
-              <Search aria-hidden="true" size={20} />
-            </div>
-            <b>No matching transactions</b>
-            <span>Try a different keyword or filter.</span>
+            <span>Loading transactions...</span>
           </div>
+        ) : transactions.length === 0 ? (
+          <EmptyState
+            description="Transactions you record will appear here."
+            icon={ArrowLeftRight}
+            title="No transactions yet"
+          />
+        ) : (
+          <EmptyState
+            description="Try a different keyword or filter."
+            icon={Search}
+            title="No matching transactions"
+          />
         )}
         <div className="pagination">
           <span>

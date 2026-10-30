@@ -12,18 +12,21 @@ import {
   ShieldCheck,
   Upload,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { CategoryIcon } from "@/components/CategoryIcon";
-import { NOT_AVAILABLE, sourceLabels } from "@/constants";
+import { TransactionIcon } from "@/components/CategoryIcon";
+import { sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
-import { sortNewestFirst } from "@/utils/finance";
+import { ApiError } from "@/services/api";
+import { accountLabel, sortNewestFirst } from "@/utils/finance";
 import { formatDayShort, formatRupiah, toIsoDate } from "@/utils/format";
 
 export default function PageContent() {
   const { accounts, categories, transactions, updateTransaction } =
     useFinance();
+  const router = useRouter();
   const { openDetails, openSheet, toast } = useTransactionSheet();
   const [confirmed, setConfirmed] = useState<string[]>([]);
 
@@ -89,7 +92,12 @@ export default function PageContent() {
         <div className="card">
           <ListFilter aria-hidden="true" size={20} />
           <span>Uncategorized</span>
-          <b>{transactions.filter((t) => !t.categoryId).length}</b>
+          <b>
+            {
+              transactions.filter((t) => !t.categoryId && t.type !== "transfer")
+                .length
+            }
+          </b>
         </div>
       </div>
 
@@ -119,22 +127,25 @@ export default function PageContent() {
                 className={`card review-card ${done ? "reviewed" : ""}`}
                 key={t.id}
               >
-                <div className={`tx-icon cat-${category?.icon}`}>
-                  <CategoryIcon icon={category?.icon ?? ""} />
-                </div>
+                <TransactionIcon
+                  icon={t.type === "transfer" ? "transfer" : category?.icon}
+                />
                 <div className="review-main">
                   <b>{t.name}</b>
                   <span>
-                    {formatDayShort(t.date)}, {t.time} · {account?.name} ••{" "}
-                    {account?.mask}
+                    {formatDayShort(t.date)}, {t.time} · {accountLabel(account)}
                   </span>
                   <div>
-                    <Badge>{category?.name}</Badge>
+                    <Badge>
+                      {t.type === "transfer"
+                        ? "Transfer"
+                        : (category?.name ?? "Uncategorized")}
+                    </Badge>
                     <Badge tone="warning">{sourceLabels[t.source]}</Badge>
                   </div>
                 </div>
                 <strong>
-                  {formatRupiah(t.type === "income" ? t.amount : -t.amount)}
+                  {formatRupiah(t.type === "expense" ? -t.amount : t.amount)}
                 </strong>
                 <div className="review-actions">
                   <Button kind="secondary" onClick={() => openDetails(t)}>
@@ -144,9 +155,19 @@ export default function PageContent() {
                   <Button
                     disabled={done}
                     onClick={() => {
-                      updateTransaction(t.id, { status: "verified" });
-                      setConfirmed([...confirmed, t.id]);
-                      toast("Transaction marked as reviewed");
+                      updateTransaction(t.id, { status: "verified" })
+                        .then(() => {
+                          setConfirmed((current) => [...current, t.id]);
+                          toast("Transaction marked as reviewed");
+                        })
+                        .catch((error: unknown) =>
+                          toast(
+                            error instanceof ApiError
+                              ? error.message
+                              : "Please try again.",
+                            true,
+                          ),
+                        );
                     }}
                   >
                     <Check aria-hidden="true" size={17} />
@@ -171,7 +192,7 @@ export default function PageContent() {
             <Plus aria-hidden="true" size={17} />
             Add Manually
           </Button>
-          <Button kind="ghost" onClick={() => toast(NOT_AVAILABLE)}>
+          <Button kind="ghost" onClick={() => router.push("/settings/import")}>
             <Upload aria-hidden="true" size={17} />
             Import Bank Statement
           </Button>

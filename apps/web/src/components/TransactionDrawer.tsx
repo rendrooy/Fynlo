@@ -20,6 +20,8 @@ import {
 
 import { sourceLabels, statusLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
+import { ApiError } from "@/services/api";
+import { accountLabel } from "@/utils/finance";
 import { formatDayShort, formatRupiah } from "@/utils/format";
 
 export function TransactionDrawer({
@@ -31,7 +33,7 @@ export function TransactionDrawer({
   id: null | string;
   onClose: () => void;
   onEdit: (transaction: TransactionInterface) => void;
-  toast: (message: string) => void;
+  toast: (message: string, isError?: boolean) => void;
 }) {
   const { accounts, categories, deleteTransaction, transactions } =
     useFinance();
@@ -39,6 +41,8 @@ export function TransactionDrawer({
   const account = accounts.find((a) => a.id === transaction?.accountId);
   const category = categories.find((c) => c.id === transaction?.categoryId);
   const isIncome = transaction?.type === "income";
+  const isTransfer = transaction?.type === "transfer";
+  const target = accounts.find((a) => a.id === transaction?.toAccountId);
 
   const rows: [LucideIcon, string, string][] = transaction
     ? [
@@ -47,9 +51,20 @@ export function TransactionDrawer({
           "Date & time",
           `${formatDayShort(transaction.date)}, ${transaction.time}`,
         ],
-        [Wallet, "Account", `${account?.name} •• ${account?.mask}`],
-        [ListFilter, "Category", category?.name ?? "Other"],
-        [ArrowLeftRight, "Type", isIncome ? "Income" : "Expense"],
+        ...(isTransfer
+          ? ([
+              [Wallet, "From", accountLabel(account)],
+              [Wallet, "To", accountLabel(target)],
+            ] as [LucideIcon, string, string][])
+          : ([
+              [Wallet, "Account", accountLabel(account)],
+              [ListFilter, "Category", category?.name ?? "Uncategorized"],
+            ] as [LucideIcon, string, string][])),
+        [
+          ArrowLeftRight,
+          "Type",
+          isTransfer ? "Transfer" : isIncome ? "Income" : "Expense",
+        ],
         [Link2, "Data source", sourceLabels[transaction.source]],
         [Info, "Note", transaction.detail || "-"],
       ]
@@ -77,7 +92,9 @@ export function TransactionDrawer({
             <span>Transaction amount</span>
             <strong>
               {formatRupiah(
-                isIncome ? transaction.amount : -transaction.amount,
+                isIncome || isTransfer
+                  ? transaction.amount
+                  : -transaction.amount,
               )}
             </strong>
             <Badge
@@ -106,9 +123,19 @@ export function TransactionDrawer({
             <Button
               kind="secondary"
               onClick={() => {
-                deleteTransaction(transaction.id);
-                onClose();
-                toast("Transaction deleted");
+                deleteTransaction(transaction.id)
+                  .then(() => {
+                    onClose();
+                    toast("Transaction deleted");
+                  })
+                  .catch((error: unknown) =>
+                    toast(
+                      error instanceof ApiError
+                        ? error.message
+                        : "Please try again.",
+                      true,
+                    ),
+                  );
               }}
             >
               <Trash2 aria-hidden="true" size={17} />

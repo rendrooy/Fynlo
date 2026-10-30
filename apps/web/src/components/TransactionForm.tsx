@@ -3,9 +3,14 @@
 import type { TransactionInterface, TransactionType } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
+import { Select } from "@fynlo/ui/components/select";
+import { Info } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { useFinance } from "@/providers/finance-provider";
+import { ApiError } from "@/services/api";
+import { categoryOptions } from "@/utils/category-options";
+import { accountLabel } from "@/utils/finance";
 import { formatGrouped, toIsoDate } from "@/utils/format";
 
 export function TransactionForm({
@@ -19,59 +24,102 @@ export function TransactionForm({
   onCancel: () => void;
   onSaved: (message: string) => void;
 }) {
-  const { accounts, addTransaction, categories, updateTransaction } =
-    useFinance();
+  const {
+    accounts,
+    accountsStatus,
+    addTransaction,
+    categories,
+    updateTransaction,
+  } = useFinance();
   const [type, setType] = useState(editing?.type ?? defaultType);
   const [name, setName] = useState(editing?.name ?? "");
   const [amount, setAmount] = useState(editing?.amount ?? 0);
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? "");
-  const [accountId, setAccountId] = useState(
-    editing?.accountId ?? accounts[0]?.id ?? "",
-  );
+  const [chosenAccountId, setAccountId] = useState(editing?.accountId ?? "");
+  // Accounts may finish loading after the form opens, so the default is derived.
+  const accountId = chosenAccountId || (accounts[0]?.id ?? "");
+  const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? "");
   const [date, setDate] = useState(editing?.date ?? toIsoDate(new Date()));
   const [detail, setDetail] = useState(editing?.detail ?? "");
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
+  const isTransfer = type === "transfer";
   const options = categories.filter((c) => c.type === type);
+  const sameAccount = isTransfer && toAccountId === accountId;
+  const targetMissing = isTransfer && (!toAccountId || sameAccount);
 
   function changeType(next: TransactionType) {
     setType(next);
     setCategoryId("");
   }
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    if (amount <= 0 || !categoryId || !date) return;
+    if (
+      amount <= 0 ||
+      !accountId ||
+      !date ||
+      targetMissing ||
+      (!isTransfer && !categoryId)
+    ) {
+      return;
+    }
     const categoryName = categories.find((c) => c.id === categoryId)?.name;
+    const now = new Date();
     const values = {
       accountId,
       amount,
-      categoryId,
+      ...(isTransfer ? { toAccountId } : { categoryId }),
       date,
       detail: detail.trim(),
-      name: name.trim() || categoryName || "Transaction",
-      type,
+      name:
+        name.trim() ||
+        (isTransfer ? "Transfer" : categoryName) ||
+        "Transaction",
+      time:
+        editing?.time ??
+        `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
     };
-    if (editing) {
-      updateTransaction(editing.id, values);
-      onSaved("Transaction updated");
-    } else {
-      const now = new Date();
-      addTransaction({
-        ...values,
-        source: "manual",
-        status: "verified",
-        time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
-      });
-      onSaved("Transaction added");
+    setError("");
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateTransaction(editing.id, values);
+        onSaved("Transaction updated");
+      } else {
+        await addTransaction(values);
+        onSaved("Transaction added");
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Something went wrong. Please try again.",
+      );
+      setSaving(false);
     }
   }
 
   return (
     <form noValidate onSubmit={submit}>
-      <div aria-label="Transaction type" className="type-tabs" role="group">
-        {(["expense", "income"] as const).map((option) => (
+      {accountsStatus === "ready" && accounts.length === 0 && (
+        <div className="notice">
+          <Info aria-hidden="true" size={20} />
+          <div>
+            <b>Add an account first</b>
+            <span>Every transaction has to belong to an account.</span>
+          </div>
+        </div>
+      )}
+      <div
+        aria-label="Transaction type"
+        className="type-tabs three"
+        role="group"
+      >
+        {(["expense", "income", "transfer"] as const).map((option) => (
           <button
             aria-pressed={type === option}
             className={type === option ? "active" : undefined}
@@ -79,7 +127,11 @@ export function TransactionForm({
             onClick={() => changeType(option)}
             type="button"
           >
-            {option === "expense" ? "Expense" : "Income"}
+            {option === "expense"
+              ? "Expense"
+              : option === "income"
+                ? "Income"
+                : "Transfer"}
           </button>
         ))}
       </div>
@@ -89,7 +141,7 @@ export function TransactionForm({
         <input
           maxLength={60}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Example: Lunch"
+          placeholder={isTransfer ? "Example: Top up" : "Example: Lunch"}
           value={name}
         />
       </label>
@@ -122,35 +174,53 @@ export function TransactionForm({
           />
         </label>
         <label>
-          Account
-          <select
-            onChange={(event) => setAccountId(event.target.value)}
+          {isTransfer ? "From account" : "Account"}
+          <Select
+            onChange={setAccountId}
+            options={accounts.map((account) => ({
+              label: accountLabel(account),
+              value: account.id,
+            }))}
+            placeholder="Choose an account"
             value={accountId}
-          >
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name} •• {account.mask}
-              </option>
-            ))}
-          </select>
+          />
         </label>
-        <label>
-          Category
-          <select
-            onChange={(event) => setCategoryId(event.target.value)}
-            value={categoryId}
-          >
-            <option value="">Choose a category</option>
-            {options.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          {submitted && !categoryId && (
-            <span className="field-error">Choose a category</span>
-          )}
-        </label>
+        {isTransfer ? (
+          <label>
+            To account
+            <Select
+              onChange={setToAccountId}
+              options={accounts
+                .filter((account) => account.id !== accountId)
+                .map((account) => ({
+                  label: accountLabel(account),
+                  value: account.id,
+                }))}
+              placeholder="Choose an account"
+              value={toAccountId === accountId ? "" : toAccountId}
+            />
+            {submitted && targetMissing && (
+              <span className="field-error">
+                {accounts.length < 2
+                  ? "Add a second account first"
+                  : "Choose a different account"}
+              </span>
+            )}
+          </label>
+        ) : (
+          <label>
+            Category
+            <Select
+              onChange={setCategoryId}
+              options={categoryOptions(options)}
+              placeholder="Choose a category"
+              value={categoryId}
+            />
+            {submitted && !categoryId && (
+              <span className="field-error">Choose a category</span>
+            )}
+          </label>
+        )}
       </div>
 
       <label>
@@ -163,11 +233,19 @@ export function TransactionForm({
         />
       </label>
 
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+
       <div className="modal-actions">
         <Button kind="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">Save Transaction</Button>
+        <Button disabled={saving || accounts.length === 0} type="submit">
+          {saving ? "Saving..." : "Save Transaction"}
+        </Button>
       </div>
     </form>
   );

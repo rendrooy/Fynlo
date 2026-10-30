@@ -22,16 +22,24 @@ export const inMonth = (transactions: TransactionInterface[], month: Date) => {
 export const previousMonth = (date = new Date()) =>
   new Date(date.getFullYear(), date.getMonth() - 1, 1);
 
+export const touchesAccount = (t: TransactionInterface, accountId: string) =>
+  t.accountId === accountId || t.toAccountId === accountId;
+
 export function accountBalance(
   account: AccountInterface,
   transactions: TransactionInterface[],
 ) {
-  return transactions
-    .filter((t) => t.accountId === account.id)
-    .reduce(
-      (balance, t) => balance + (t.type === "income" ? t.amount : -t.amount),
-      account.openingBalance,
-    );
+  return transactions.reduce(
+    (balance, t) => balance + signedAmount(t, account.id),
+    account.openingBalance,
+  );
+}
+
+/** How much a transaction changes one account's balance. */
+export function signedAmount(t: TransactionInterface, accountId: string) {
+  if (t.toAccountId === accountId) return t.amount;
+  if (t.accountId !== accountId) return 0;
+  return t.type === "income" ? t.amount : -t.amount;
 }
 
 export function totals(transactions: TransactionInterface[]) {
@@ -39,19 +47,22 @@ export function totals(transactions: TransactionInterface[]) {
   let expense = 0;
   for (const t of transactions) {
     if (t.type === "income") income += t.amount;
-    else expense += t.amount;
+    if (t.type === "expense") expense += t.amount;
   }
   return { expense, income, net: income - expense };
 }
 
+/** Excluded accounts stay visible but do not count toward totals. */
 export const totalBalance = (
   accounts: AccountInterface[],
   transactions: TransactionInterface[],
 ) =>
-  accounts.reduce(
-    (sum, account) => sum + accountBalance(account, transactions),
-    0,
-  );
+  accounts
+    .filter((account) => !account.isExcluded)
+    .reduce((sum, account) => sum + accountBalance(account, transactions), 0);
+
+export const accountLabel = (account?: AccountInterface) =>
+  account ? `${account.name}${account.mask ? ` •• ${account.mask}` : ""}` : "";
 
 export const sortNewestFirst = (transactions: TransactionInterface[]) =>
   [...transactions].sort(
@@ -85,7 +96,7 @@ export function biggestIncrease(
       (month) =>
         spentByCategory(inMonth(transactions, month)).get(categoryId) ?? 0,
     ),
-    name: categories.find((c) => c.id === categoryId)?.name ?? "Other",
+    name: categories.find((c) => c.id === categoryId)?.name ?? "Uncategorized",
     percent: before > 0 ? Math.round((difference / before) * 100) : null,
   };
 }
@@ -161,7 +172,7 @@ export function expenseBreakdown(
         amount,
         color: category?.color ?? "#64748b",
         id: categoryId,
-        name: category?.name ?? "Other",
+        name: category?.name ?? "Uncategorized",
         percent: total > 0 ? Math.round((amount / total) * 100) : 0,
       };
     })
@@ -182,7 +193,10 @@ export function spentByCategory(transactions: TransactionInterface[]) {
   const spent = new Map<string, number>();
   for (const t of transactions) {
     if (t.type === "expense")
-      spent.set(t.categoryId, (spent.get(t.categoryId) ?? 0) + t.amount);
+      spent.set(
+        t.categoryId ?? "",
+        (spent.get(t.categoryId ?? "") ?? 0) + t.amount,
+      );
   }
   return spent;
 }
