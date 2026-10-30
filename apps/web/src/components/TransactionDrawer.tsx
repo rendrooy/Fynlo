@@ -20,6 +20,7 @@ import {
 
 import { sourceLabels, statusLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
+import { accountLabel } from "@/utils/finance";
 import { formatDayShort, formatRupiah } from "@/utils/format";
 
 export function TransactionDrawer({
@@ -47,7 +48,7 @@ export function TransactionDrawer({
           "Date & time",
           `${formatDayShort(transaction.date)}, ${transaction.time}`,
         ],
-        [Wallet, "Account", `${account?.name} •• ${account?.mask}`],
+        [Wallet, "Account", accountLabel(account)],
         [ListFilter, "Category", category?.name ?? "Other"],
         [ArrowLeftRight, "Type", isIncome ? "Income" : "Expense"],
         [Link2, "Data source", sourceLabels[transaction.source]],

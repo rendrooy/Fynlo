@@ -44,14 +44,17 @@ export function totals(transactions: TransactionInterface[]) {
   return { expense, income, net: income - expense };
 }
 
+/** Excluded accounts stay visible but do not count toward totals. */
 export const totalBalance = (
   accounts: AccountInterface[],
   transactions: TransactionInterface[],
 ) =>
-  accounts.reduce(
-    (sum, account) => sum + accountBalance(account, transactions),
-    0,
-  );
+  accounts
+    .filter((account) => !account.isExcluded)
+    .reduce((sum, account) => sum + accountBalance(account, transactions), 0);
+
+export const accountLabel = (account?: AccountInterface) =>
+  account ? `${account.name}${account.mask ? ` •• ${account.mask}` : ""}` : "";
 
 export const sortNewestFirst = (transactions: TransactionInterface[]) =>
   [...transactions].sort(

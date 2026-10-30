@@ -18,7 +18,7 @@ import { CategoryIcon } from "@/components/CategoryIcon";
 import { NOT_AVAILABLE, sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
-import { sortNewestFirst } from "@/utils/finance";
+import { accountLabel, sortNewestFirst } from "@/utils/finance";
 import { formatDayShort, formatRupiah, toIsoDate } from "@/utils/format";
 
 export default function PageContent() {
@@ -125,8 +125,7 @@ export default function PageContent() {
                 <div className="review-main">
                   <b>{t.name}</b>
                   <span>
-                    {formatDayShort(t.date)}, {t.time} · {account?.name} ••{" "}
-                    {account?.mask}
+                    {formatDayShort(t.date)}, {t.time} · {accountLabel(account)}
                   </span>
                   <div>
                     <Badge>{category?.name}</Badge>

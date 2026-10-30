@@ -1,7 +1,6 @@
 "use client";
 
 import { Badge } from "@fynlo/ui/components/badge";
-import { Button } from "@fynlo/ui/components/button";
 import { Segmented } from "@fynlo/ui/components/segmented";
 import {
   ArrowDown,
@@ -11,7 +10,7 @@ import {
   ChartColumn,
   Info,
   type LucideIcon,
-  Plus,
+  Settings,
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
@@ -22,9 +21,8 @@ import { CashflowChart } from "@/components/CashflowChart";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpenseBreakdown } from "@/components/ExpenseBreakdown";
 import { TransactionList } from "@/components/TransactionList";
-import { NOT_AVAILABLE, sourceLabels } from "@/constants";
+import { sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
-import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import {
   accountBalance,
   biggestIncrease,
@@ -39,8 +37,7 @@ import {
 import { formatCompact, formatDayShort, formatRupiah } from "@/utils/format";
 
 export default function PageContent() {
-  const { accounts, categories, transactions } = useFinance();
-  const { toast } = useTransactionSheet();
+  const { accounts, accountsStatus, categories, transactions } = useFinance();
   const [period, setPeriod] = useState<CashflowPeriod>("daily");
 
   const now = new Date();
@@ -146,12 +143,12 @@ export default function PageContent() {
           <h2>Connected Accounts</h2>
           <p>Balances based on recorded transactions.</p>
         </div>
-        <Button kind="secondary" onClick={() => toast(NOT_AVAILABLE)}>
-          <Plus aria-hidden="true" size={17} />
-          Add Account
-        </Button>
+        <Link className="btn secondary" href="/settings/accounts">
+          <Settings aria-hidden="true" size={17} />
+          Manage Accounts
+        </Link>
       </div>
-      {accounts.length === 0 && (
+      {accountsStatus === "ready" && accounts.length === 0 && (
         <div className="card">
           <EmptyState
             description="Your accounts and balances will appear here."
@@ -177,7 +174,7 @@ export default function PageContent() {
                 </div>
                 <div>
                   <b>{account.name}</b>
-                  <span>•• {account.mask}</span>
+                  {account.mask && <span>•• {account.mask}</span>}
                 </div>
               </div>
               <div className="account-label">

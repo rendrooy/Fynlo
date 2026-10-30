@@ -1,4 +1,10 @@
-import type { AuthUserInterface, LoginResponseInterface } from "@fynlo/types";
+import type {
+  AccountInputInterface,
+  AccountInterface,
+  AccountTypeInterface,
+  AuthUserInterface,
+  LoginResponseInterface,
+} from "@fynlo/types";
 
 import {
   AUTH_SESSION_CLEARED_EVENT,
@@ -59,3 +65,42 @@ export const loginRequest = (email: string, password: string) =>
   });
 
 export const getProfileRequest = () => request<AuthUserInterface>("/auth/me");
+
+export const listAccountTypesRequest = () =>
+  request<AccountTypeInterface[]>("/account-types");
+
+export const createAccountTypeRequest = (name: string) =>
+  request<AccountTypeInterface>("/account-types", {
+    body: JSON.stringify({ name }),
+    method: "POST",
+  });
+
+export const renameAccountTypeRequest = (id: string, name: string) =>
+  request<AccountTypeInterface>(`/account-types/${id}`, {
+    body: JSON.stringify({ name }),
+    method: "PATCH",
+  });
+
+export const deleteAccountTypeRequest = (id: string) =>
+  request<undefined>(`/account-types/${id}`, { method: "DELETE" });
+
+export const listAccountsRequest = () =>
+  request<AccountInterface[]>("/accounts");
+
+export const createAccountRequest = (input: AccountInputInterface) =>
+  request<AccountInterface>("/accounts", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const updateAccountRequest = (
+  id: string,
+  changes: Partial<AccountInputInterface> & { isExcluded?: boolean },
+) =>
+  request<AccountInterface>(`/accounts/${id}`, {
+    body: JSON.stringify(changes),
+    method: "PATCH",
+  });
+
+export const deleteAccountRequest = (id: string) =>
+  request<undefined>(`/accounts/${id}`, { method: "DELETE" });

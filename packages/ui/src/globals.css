@@ -94,3 +94,24 @@ dialog::backdrop{background:rgba(15,23,42,.42);backdrop-filter:blur(3px)}
 .auth-password{position:relative;display:block}
 .auth-password input{padding-right:42px}
 .auth-password button{position:absolute;top:0;right:0;width:40px;height:39px;display:grid;place-items:center;background:none;border:0;color:var(--muted)}
+.account-actions{display:flex;gap:10px}
+.modal-text{font-size:13px;color:var(--muted);line-height:1.5;margin:0}
+.modal-text b{color:var(--text)}
+.modal label.checkbox-field{flex-direction:row;align-items:center;gap:8px;font-weight:400;color:var(--muted)}
+.checkbox-field input{width:16px;height:16px;flex:none}
+.color-field{border:0;padding:0;margin:0 0 13px}
+.color-field legend{font-size:12px;font-weight:500;margin-bottom:6px;padding:0}
+.color-field>div{display:flex;flex-wrap:wrap;gap:8px}
+.color-field button{width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--border)}
+.color-field button.active{box-shadow:0 0 0 2px var(--text)}
+.modal .field-error{margin:0 0 8px}
+.card.empty .btn{margin-top:8px}
+.back-link{justify-content:flex-start;margin-bottom:10px;height:32px}
+.manage-list{overflow:hidden}
+.manage-row{display:flex;align-items:center;gap:12px;padding:12px 17px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.manage-row:last-child{border-bottom:0}
+.manage-copy{display:flex;flex-direction:column;gap:3px;flex:1;min-width:140px}
+.manage-copy b{font-size:13px}.manage-copy span{font-size:11px;color:var(--muted)}
+.manage-row>strong{font-size:14px;white-space:nowrap}
+.page-intro .btn{flex:none}
+@media(max-width:800px){.manage-row .account-actions{width:100%;justify-content:flex-end}.page-intro>.btn{height:34px;padding:0 10px}}

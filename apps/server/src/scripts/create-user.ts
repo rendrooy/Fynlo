@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline";
 
 import { pool } from "../connection/db";
+import { DEFAULT_ACCOUNT_TYPES } from "../services/account-type-service";
 import { hashPassword } from "../utils/password";
 
 const MIN_PASSWORD_LENGTH = 12;
@@ -63,11 +64,24 @@ async function main() {
     );
   }
 
+  // A single statement, so a user can never exist without default account types.
   const { rowCount } = await pool.query(
-    `INSERT INTO m_user (email, password_hash, name, initials)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (email) DO NOTHING`,
-    [email, await hashPassword(password), name, initialsOf(name)],
+    `WITH new_user AS (
+       INSERT INTO m_user (email, password_hash, name, initials)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO NOTHING
+       RETURNING id
+     )
+     INSERT INTO m_account_type (user_id, name)
+     SELECT new_user.id, type_name
+     FROM new_user CROSS JOIN unnest($5::text[]) AS type_name`,
+    [
+      email,
+      await hashPassword(password),
+      name,
+      initialsOf(name),
+      DEFAULT_ACCOUNT_TYPES,
+    ],
   );
   if (!rowCount) throw new Error(`User already exists: ${email}`);
   console.log(`Created user ${email}`);

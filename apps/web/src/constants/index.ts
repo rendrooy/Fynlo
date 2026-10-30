@@ -1,16 +1,9 @@
 import type {
-  AccountKind,
   AssetKind,
   CategoryInterface,
   TransactionSource,
   TransactionStatus,
 } from "@fynlo/types";
-
-export const accountKinds: Record<AccountKind, string> = {
-  bank: "Bank account",
-  cash: "Cash",
-  ewallet: "E-wallet",
-};
 
 export const assetKinds: Record<AssetKind, string> = {
   gold: "Precious metal",

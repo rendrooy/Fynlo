@@ -1,0 +1,188 @@
+"use client";
+
+import type { AccountInterface } from "@fynlo/types";
+
+import { Button } from "@fynlo/ui/components/button";
+import { type FormEvent, useState } from "react";
+
+import { useFinance } from "@/providers/finance-provider";
+import { ApiError } from "@/services/api";
+import { formatGrouped } from "@/utils/format";
+
+const COLORS = [
+  "#0f766e",
+  "#0284c7",
+  "#7c3aed",
+  "#db2777",
+  "#ea580c",
+  "#ca8a04",
+  "#334155",
+];
+
+export function AccountForm({
+  editing,
+  onCancel,
+  onSaved,
+}: {
+  editing?: AccountInterface;
+  onCancel: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const { accountTypes, createAccount, updateAccount } = useFinance();
+  const [name, setName] = useState(editing?.name ?? "");
+  const [accountTypeId, setAccountTypeId] = useState(
+    editing?.accountTypeId ?? accountTypes[0]?.id ?? "",
+  );
+  const [mask, setMask] = useState(editing?.mask ?? "");
+  const [color, setColor] = useState<string>(
+    editing?.color ?? (COLORS[0] as string),
+  );
+  const [balance, setBalance] = useState(editing?.openingBalance ?? 0);
+  const [negative, setNegative] = useState((editing?.openingBalance ?? 0) < 0);
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const nameError = submitted && !name.trim();
+  const maskError = submitted && mask !== "" && mask.length !== 4;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSubmitted(true);
+    if (!name.trim() || !accountTypeId || (mask !== "" && mask.length !== 4)) {
+      return;
+    }
+    const input = {
+      accountTypeId,
+      color,
+      mask: mask || null,
+      name: name.trim(),
+      openingBalance: negative ? -Math.abs(balance) : Math.abs(balance),
+    };
+    setError("");
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateAccount(editing.id, input);
+        onSaved("Account updated");
+      } else {
+        await createAccount(input);
+        onSaved("Account added");
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Something went wrong. Please try again.",
+      );
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form noValidate onSubmit={submit}>
+      <label>
+        Account name
+        <input
+          autoFocus
+          maxLength={100}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Example: BCA Savings"
+          value={name}
+        />
+        {nameError && (
+          <span className="field-error">Enter an account name</span>
+        )}
+      </label>
+
+      <div className="form-grid">
+        <label>
+          Type
+          <select
+            onChange={(event) => setAccountTypeId(event.target.value)}
+            value={accountTypeId}
+          >
+            {accountTypes.length === 0 && (
+              <option value="">Add a type first</option>
+            )}
+            {accountTypes.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+          {submitted && !accountTypeId && (
+            <span className="field-error">Add an account type first</span>
+          )}
+        </label>
+        <label>
+          Last 4 digits (optional)
+          <input
+            autoComplete="off"
+            inputMode="numeric"
+            maxLength={4}
+            onChange={(event) => setMask(event.target.value.replace(/\D/g, ""))}
+            placeholder="1234"
+            value={mask}
+          />
+          {maskError && <span className="field-error">Enter 4 digits</span>}
+        </label>
+      </div>
+
+      <label>
+        Opening balance
+        <input
+          autoComplete="off"
+          inputMode="numeric"
+          onChange={(event) =>
+            setBalance(
+              Number(event.target.value.replace(/\D/g, "").slice(0, 14)),
+            )
+          }
+          placeholder="Rp0"
+          value={balance ? `Rp${formatGrouped(Math.abs(balance))}` : ""}
+        />
+      </label>
+      <label className="checkbox-field">
+        <input
+          checked={negative}
+          onChange={(event) => setNegative(event.target.checked)}
+          type="checkbox"
+        />
+        This balance is negative (for example, an overdraft)
+      </label>
+
+      <fieldset className="color-field">
+        <legend>Color</legend>
+        <div>
+          {COLORS.map((option) => (
+            <button
+              aria-label={`Color ${option}`}
+              aria-pressed={color === option}
+              className={color === option ? "active" : undefined}
+              key={option}
+              onClick={() => setColor(option)}
+              style={{ background: option }}
+              type="button"
+            />
+          ))}
+        </div>
+      </fieldset>
+
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="modal-actions">
+        <Button kind="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button disabled={saving} type="submit">
+          {saving ? "Saving..." : "Save Account"}
+        </Button>
+      </div>
+    </form>
+  );
+}

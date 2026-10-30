@@ -19,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 
 import { NOT_AVAILABLE } from "@/constants";
 import { useAuth } from "@/providers/auth-provider";
@@ -36,6 +37,7 @@ interface SettingsItem {
 }
 
 export default function PageContent() {
+  const router = useRouter();
   const { signOut, user } = useAuth();
   const { accounts, categories } = useFinance();
   const { toast } = useTransactionSheet();
@@ -52,10 +54,11 @@ export default function PageContent() {
           value: "IDR",
         },
         {
-          description: "Manage aliases, masks, and tracking sources",
+          action: () => router.push("/settings/accounts"),
+          description: "Add and edit your accounts and their types",
           icon: Wallet,
-          title: "Tracked accounts",
-          value: `${accounts.length} accounts`,
+          title: "Accounts & types",
+          value: `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`,
         },
         {
           description: "Set names, icons, and categorization rules",

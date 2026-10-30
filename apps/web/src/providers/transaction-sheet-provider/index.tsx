@@ -3,7 +3,7 @@
 import type { TransactionInterface, TransactionType } from "@fynlo/types";
 
 import { Modal } from "@fynlo/ui/components/modal";
-import { Check, X } from "lucide-react";
+import { Check, CircleAlert, X } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -21,7 +21,7 @@ type FormState = { editing: TransactionInterface } | { type: TransactionType };
 interface TransactionSheetValue {
   openDetails: (transaction: TransactionInterface) => void;
   openSheet: (type?: TransactionType) => void;
-  toast: (message: string) => void;
+  toast: (message: string, isError?: boolean) => void;
 }
 
 const TransactionSheetContext = createContext<null | TransactionSheetValue>(
@@ -36,6 +36,7 @@ export function TransactionSheetProvider({
   const [form, setForm] = useState<FormState | null>(null);
   const [selectedId, setSelectedId] = useState<null | string>(null);
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
   useEffect(() => {
     if (!message) return;
@@ -48,7 +49,10 @@ export function TransactionSheetProvider({
       openDetails: (transaction: TransactionInterface) =>
         setSelectedId(transaction.id),
       openSheet: (type: TransactionType = "expense") => setForm({ type }),
-      toast: setMessage,
+      toast: (text: string, error = false) => {
+        setMessage(text);
+        setIsError(error);
+      },
     }),
     [],
   );
@@ -89,9 +93,13 @@ export function TransactionSheetProvider({
 
       {message && (
         <div aria-live="polite" className="toast" role="status">
-          <Check aria-hidden="true" size={20} />
+          {isError ? (
+            <CircleAlert aria-hidden="true" size={20} />
+          ) : (
+            <Check aria-hidden="true" size={20} />
+          )}
           <div>
-            <b>Done</b>
+            <b>{isError ? "Couldn't save" : "Done"}</b>
             <span>{message}</span>
           </div>
           <button

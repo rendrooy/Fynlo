@@ -7,6 +7,7 @@ import { Info } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { useFinance } from "@/providers/finance-provider";
+import { accountLabel } from "@/utils/finance";
 import { formatGrouped, toIsoDate } from "@/utils/format";
 
 export function TransactionForm({
@@ -20,8 +21,13 @@ export function TransactionForm({
   onCancel: () => void;
   onSaved: (message: string) => void;
 }) {
-  const { accounts, addTransaction, categories, updateTransaction } =
-    useFinance();
+  const {
+    accounts,
+    accountsStatus,
+    addTransaction,
+    categories,
+    updateTransaction,
+  } = useFinance();
   const [type, setType] = useState(editing?.type ?? defaultType);
   const [name, setName] = useState(editing?.name ?? "");
   const [amount, setAmount] = useState(editing?.amount ?? 0);
@@ -71,7 +77,7 @@ export function TransactionForm({
 
   return (
     <form noValidate onSubmit={submit}>
-      {accounts.length === 0 && (
+      {accountsStatus === "ready" && accounts.length === 0 && (
         <div className="notice">
           <Info aria-hidden="true" size={20} />
           <div>
@@ -139,7 +145,7 @@ export function TransactionForm({
           >
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {account.name} •• {account.mask}
+                {accountLabel(account)}
               </option>
             ))}
           </select>

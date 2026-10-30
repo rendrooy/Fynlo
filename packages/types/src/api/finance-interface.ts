@@ -1,14 +1,23 @@
-export interface AccountInterface {
+export interface AccountInputInterface {
+  accountTypeId: string;
   color: string;
-  id: string;
-  kind: AccountKind;
-  mask: string;
+  mask: null | string;
   name: string;
   openingBalance: number;
-  source: TransactionSource;
 }
 
-export type AccountKind = "bank" | "cash" | "ewallet";
+export interface AccountInterface extends AccountInputInterface {
+  id: string;
+  isExcluded: boolean;
+  source: TransactionSource;
+  typeName: string;
+}
+
+export interface AccountTypeInterface {
+  accountCount: number;
+  id: string;
+  name: string;
+}
 
 export interface AssetInterface {
   id: string;

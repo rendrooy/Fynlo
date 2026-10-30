@@ -8,6 +8,7 @@ import { ChevronRight } from "lucide-react";
 import { statusLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
+import { accountLabel } from "@/utils/finance";
 import { formatDayShort, formatRupiah } from "@/utils/format";
 
 import { CategoryIcon } from "./CategoryIcon";
@@ -37,9 +38,7 @@ export function TransactionList({ items }: { items: TransactionInterface[] }) {
               <span>{t.detail || category?.name}</span>
             </div>
             <div className="tx-meta">
-              <b>
-                {account?.name} •• {account?.mask}
-              </b>
+              <b>{accountLabel(account)}</b>
               <span>
                 {formatDayShort(t.date)}, {t.time}
               </span>
