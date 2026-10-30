@@ -1,0 +1,88 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --surface-muted: #eff2ef;
+  --ink: #15201d;
+  --muted: #5a6864;
+  --line: #e3e7e4;
+  --accent: #0f766e;
+  --accent-soft: #e0f2ef;
+  --on-accent: #ffffff;
+  --income: #047857;
+  --expense: #be123c;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --danger-soft: #ffe4e6;
+  /* Warna grafik sudah divalidasi untuk buta warna, jangan disamakan dengan warna teks. */
+  --chart-income: #0d9488;
+  --chart-expense: #e11d48;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0f1413;
+  --surface: #171e1c;
+  --surface-muted: #212a27;
+  --ink: #e8eeec;
+  --muted: #9aa8a4;
+  --line: #2a3431;
+  --accent: #2dd4bf;
+  --accent-soft: #123430;
+  --on-accent: #04211e;
+  --income: #34d399;
+  --expense: #fb7185;
+  --warning: #fbbf24;
+  --warning-soft: #3a2c0a;
+  --danger-soft: #3f1520;
+  --chart-income: #0d9488;
+  --chart-expense: #f43f5e;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger-soft: var(--danger-soft);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+select,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+select {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
