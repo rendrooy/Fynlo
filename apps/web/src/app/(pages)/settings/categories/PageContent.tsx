@@ -3,7 +3,7 @@
 import type {
   CategoryGroupInterface,
   CategoryInterface,
-  TransactionType,
+  CategoryType,
 } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
@@ -37,7 +37,7 @@ export default function PageContent() {
     transactions,
   } = useFinance();
   const { toast } = useTransactionSheet();
-  const [type, setType] = useState<TransactionType>("expense");
+  const [type, setType] = useState<CategoryType>("expense");
   const [categoryForm, setCategoryForm] = useState<null | {
     editing?: CategoryInterface;
     groupId?: string;

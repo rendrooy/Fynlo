@@ -41,6 +41,8 @@ export function TransactionDrawer({
   const account = accounts.find((a) => a.id === transaction?.accountId);
   const category = categories.find((c) => c.id === transaction?.categoryId);
   const isIncome = transaction?.type === "income";
+  const isTransfer = transaction?.type === "transfer";
+  const target = accounts.find((a) => a.id === transaction?.toAccountId);
 
   const rows: [LucideIcon, string, string][] = transaction
     ? [
@@ -49,9 +51,20 @@ export function TransactionDrawer({
           "Date & time",
           `${formatDayShort(transaction.date)}, ${transaction.time}`,
         ],
-        [Wallet, "Account", accountLabel(account)],
-        [ListFilter, "Category", category?.name ?? "Uncategorized"],
-        [ArrowLeftRight, "Type", isIncome ? "Income" : "Expense"],
+        ...(isTransfer
+          ? ([
+              [Wallet, "From", accountLabel(account)],
+              [Wallet, "To", accountLabel(target)],
+            ] as [LucideIcon, string, string][])
+          : ([
+              [Wallet, "Account", accountLabel(account)],
+              [ListFilter, "Category", category?.name ?? "Uncategorized"],
+            ] as [LucideIcon, string, string][])),
+        [
+          ArrowLeftRight,
+          "Type",
+          isTransfer ? "Transfer" : isIncome ? "Income" : "Expense",
+        ],
         [Link2, "Data source", sourceLabels[transaction.source]],
         [Info, "Note", transaction.detail || "-"],
       ]
@@ -79,7 +92,9 @@ export function TransactionDrawer({
             <span>Transaction amount</span>
             <strong>
               {formatRupiah(
-                isIncome ? transaction.amount : -transaction.amount,
+                isIncome || isTransfer
+                  ? transaction.amount
+                  : -transaction.amount,
               )}
             </strong>
             <Badge

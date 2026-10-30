@@ -38,13 +38,17 @@ export function TransactionForm({
   const [chosenAccountId, setAccountId] = useState(editing?.accountId ?? "");
   // Accounts may finish loading after the form opens, so the default is derived.
   const accountId = chosenAccountId || (accounts[0]?.id ?? "");
+  const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? "");
   const [date, setDate] = useState(editing?.date ?? toIsoDate(new Date()));
   const [detail, setDetail] = useState(editing?.detail ?? "");
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const isTransfer = type === "transfer";
   const options = categories.filter((c) => c.type === type);
+  const sameAccount = isTransfer && toAccountId === accountId;
+  const targetMissing = isTransfer && (!toAccountId || sameAccount);
 
   function changeType(next: TransactionType) {
     setType(next);
@@ -54,16 +58,27 @@ export function TransactionForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    if (amount <= 0 || !accountId || !categoryId || !date) return;
+    if (
+      amount <= 0 ||
+      !accountId ||
+      !date ||
+      targetMissing ||
+      (!isTransfer && !categoryId)
+    ) {
+      return;
+    }
     const categoryName = categories.find((c) => c.id === categoryId)?.name;
     const now = new Date();
     const values = {
       accountId,
       amount,
-      categoryId,
+      ...(isTransfer ? { toAccountId } : { categoryId }),
       date,
       detail: detail.trim(),
-      name: name.trim() || categoryName || "Transaction",
+      name:
+        name.trim() ||
+        (isTransfer ? "Transfer" : categoryName) ||
+        "Transaction",
       time:
         editing?.time ??
         `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
@@ -99,8 +114,12 @@ export function TransactionForm({
           </div>
         </div>
       )}
-      <div aria-label="Transaction type" className="type-tabs" role="group">
-        {(["expense", "income"] as const).map((option) => (
+      <div
+        aria-label="Transaction type"
+        className="type-tabs three"
+        role="group"
+      >
+        {(["expense", "income", "transfer"] as const).map((option) => (
           <button
             aria-pressed={type === option}
             className={type === option ? "active" : undefined}
@@ -108,7 +127,11 @@ export function TransactionForm({
             onClick={() => changeType(option)}
             type="button"
           >
-            {option === "expense" ? "Expense" : "Income"}
+            {option === "expense"
+              ? "Expense"
+              : option === "income"
+                ? "Income"
+                : "Transfer"}
           </button>
         ))}
       </div>
@@ -118,7 +141,7 @@ export function TransactionForm({
         <input
           maxLength={60}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Example: Lunch"
+          placeholder={isTransfer ? "Example: Top up" : "Example: Lunch"}
           value={name}
         />
       </label>
@@ -151,7 +174,7 @@ export function TransactionForm({
           />
         </label>
         <label>
-          Account
+          {isTransfer ? "From account" : "Account"}
           <Select
             onChange={setAccountId}
             options={accounts.map((account) => ({
@@ -162,18 +185,42 @@ export function TransactionForm({
             value={accountId}
           />
         </label>
-        <label>
-          Category
-          <Select
-            onChange={setCategoryId}
-            options={categoryOptions(options)}
-            placeholder="Choose a category"
-            value={categoryId}
-          />
-          {submitted && !categoryId && (
-            <span className="field-error">Choose a category</span>
-          )}
-        </label>
+        {isTransfer ? (
+          <label>
+            To account
+            <Select
+              onChange={setToAccountId}
+              options={accounts
+                .filter((account) => account.id !== accountId)
+                .map((account) => ({
+                  label: accountLabel(account),
+                  value: account.id,
+                }))}
+              placeholder="Choose an account"
+              value={toAccountId === accountId ? "" : toAccountId}
+            />
+            {submitted && targetMissing && (
+              <span className="field-error">
+                {accounts.length < 2
+                  ? "Add a second account first"
+                  : "Choose a different account"}
+              </span>
+            )}
+          </label>
+        ) : (
+          <label>
+            Category
+            <Select
+              onChange={setCategoryId}
+              options={categoryOptions(options)}
+              placeholder="Choose a category"
+              value={categoryId}
+            />
+            {submitted && !categoryId && (
+              <span className="field-error">Choose a category</span>
+            )}
+          </label>
+        )}
       </div>
 
       <label>

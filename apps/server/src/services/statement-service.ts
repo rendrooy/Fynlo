@@ -51,12 +51,18 @@ export async function importStatement(
     if (typeof row.type !== "string" || !TYPES.includes(row.type)) {
       throw invalid("Type must be expense or income");
     }
+    if (row.transferAccountId && row.categoryId) {
+      throw invalid("A transfer can't have a category");
+    }
     return {
       amount: parseAmount(row.amount),
       categoryId: row.categoryId ? String(row.categoryId) : null,
       detail: parseDetail(row.detail),
       name: parseName(row.name),
       occurredAt: parseOccurredAt(row.date, row.time),
+      transferAccountId: row.transferAccountId
+        ? String(row.transferAccountId)
+        : null,
       type: row.type,
     };
   });
@@ -76,6 +82,19 @@ export async function importStatement(
     }
   }
 
+  const targets = [...new Set(rows.flatMap((r) => r.transferAccountId ?? []))];
+  if (!targets.every(isUuid) || targets.includes(accountId)) {
+    throw invalid("Choose a different account for the transfer");
+  }
+  const { rowCount: ownedTargets } = await pool.query(
+    `SELECT 1 FROM m_account
+     WHERE user_id = $1 AND id = ANY($2::uuid[]) AND NOT is_deleted`,
+    [userId, targets],
+  );
+  if (ownedTargets !== targets.length) {
+    throw invalid("Choose a different account for the transfer");
+  }
+
   const opening = input.openingBalance ?? null;
   if (
     opening !== null &&
@@ -90,13 +109,20 @@ export async function importStatement(
     await client.query("BEGIN");
     await client.query(
       `INSERT INTO t_transaction
-         (user_id, account_id, category_id, type, amount, name, detail,
-          occurred_at, source, status)
-       SELECT $1, $2, r.category_id, r.type, r.amount, r.name, r.detail,
+         (user_id, account_id, to_account_id, category_id, type, amount, name,
+          detail, occurred_at, source, status)
+       SELECT $1,
+              -- Money coming in was sent from the other account, and vice versa.
+              CASE WHEN r.target IS NOT NULL AND r.type = 'income' THEN r.target ELSE $2::uuid END,
+              CASE WHEN r.target IS NULL THEN NULL
+                   WHEN r.type = 'income' THEN $2::uuid ELSE r.target END,
+              r.category_id,
+              CASE WHEN r.target IS NULL THEN r.type ELSE 'transfer' END,
+              r.amount, r.name, r.detail,
               r.occurred_at::timestamp AT TIME ZONE '${TIME_ZONE}', 'import',
-              CASE WHEN r.category_id IS NULL THEN 'review' ELSE 'verified' END
-       FROM unnest($3::uuid[], $4::text[], $5::numeric[], $6::text[], $7::text[], $8::text[])
-         AS r (category_id, type, amount, name, detail, occurred_at)`,
+              CASE WHEN r.category_id IS NULL AND r.target IS NULL THEN 'review' ELSE 'verified' END
+       FROM unnest($3::uuid[], $4::text[], $5::numeric[], $6::text[], $7::text[], $8::text[], $9::uuid[])
+         AS r (category_id, type, amount, name, detail, occurred_at, target)`,
       [
         userId,
         accountId,
@@ -106,6 +132,7 @@ export async function importStatement(
         rows.map((r) => r.name),
         rows.map((r) => r.detail),
         rows.map((r) => r.occurredAt),
+        rows.map((r) => r.transferAccountId),
       ],
     );
     if (opening !== null) {
@@ -156,20 +183,24 @@ export async function previewStatement(
     amount: string;
     at: string;
     day: string;
+    is_transfer: boolean;
     source: string;
     type: string;
   }>(
-    `SELECT amount, type, source,
+    // A transfer counts as money out of its source and into its destination.
+    `SELECT amount, source, type = 'transfer' AS is_transfer,
+            CASE WHEN type <> 'transfer' THEN type
+                 WHEN account_id = $2 THEN 'expense' ELSE 'income' END AS type,
             to_char(occurred_at AT TIME ZONE '${TIME_ZONE}', 'YYYY-MM-DD HH24:MI:SS') AS at,
             to_char(occurred_at AT TIME ZONE '${TIME_ZONE}', 'YYYY-MM-DD') AS day
      FROM t_transaction
-     WHERE user_id = $1 AND account_id = $2 AND NOT is_deleted
+     WHERE user_id = $1 AND (account_id = $2 OR to_account_id = $2) AND NOT is_deleted
        AND (occurred_at AT TIME ZONE '${TIME_ZONE}')::date BETWEEN $3::date AND $4::date`,
     [userId, accountId, firstDate ?? "1970-01-01", lastDate ?? "1970-01-01"],
   );
   const { rowCount: earlier } = await pool.query(
     `SELECT 1 FROM t_transaction
-     WHERE user_id = $1 AND account_id = $2 AND NOT is_deleted
+     WHERE user_id = $1 AND (account_id = $2 OR to_account_id = $2) AND NOT is_deleted
        AND (occurred_at AT TIME ZONE '${TIME_ZONE}')::date < $3::date
      LIMIT 1`,
     [userId, accountId, firstDate ?? "1970-01-01"],
@@ -183,6 +214,12 @@ export async function previewStatement(
     "SELECT id, name, type FROM m_category WHERE user_id = $1 AND NOT is_deleted",
     [userId],
   );
+
+  const { rows: owner } = await pool.query<{ name: string }>(
+    "SELECT name FROM m_user WHERE id = $1",
+    [userId],
+  );
+  const ownName = owner[0]?.name.toLowerCase() ?? "";
 
   // Each saved transaction can cover only one row, so real look-alikes stay selected.
   const unmatched = [...existing];
@@ -208,15 +245,20 @@ export async function previewStatement(
         takeMatch(
           (item) => same(item) && item.at === `${row.date} ${row.time}`,
         ) ||
-        // Manual entries have no exact time, so the day has to be enough.
+        // Manual entries and the other side of a transfer have a different
+        // time or none, so the day has to be enough.
         takeMatch(
           (item) =>
-            same(item) && item.source !== "import" && item.day === row.date,
+            same(item) &&
+            (item.source !== "import" || item.is_transfer) &&
+            item.day === row.date,
         );
       return {
         ...row,
         categoryId: guessCategory(categories, row),
         isDuplicate,
+        isPossibleTransfer:
+          ownName !== "" && row.name.toLowerCase().includes(ownName),
       };
     }),
   };

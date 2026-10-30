@@ -33,6 +33,7 @@ import {
   sortNewestFirst,
   totalBalance,
   totals,
+  touchesAccount,
 } from "@/utils/finance";
 import { formatCompact, formatDayShort, formatRupiah } from "@/utils/format";
 
@@ -160,7 +161,7 @@ export default function PageContent() {
       <div className="accounts-grid">
         {accounts.map((account) => {
           const latest = sortNewestFirst(
-            transactions.filter((t) => t.accountId === account.id),
+            transactions.filter((t) => touchesAccount(t, account.id)),
           )[0];
           const estimated = account.source === "email";
           return (

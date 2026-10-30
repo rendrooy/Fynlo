@@ -37,7 +37,7 @@ export interface CategoryGroupInterface {
   categoryCount: number;
   id: string;
   name: string;
-  type: TransactionType;
+  type: CategoryType;
 }
 
 export interface CategoryInputInterface {
@@ -52,13 +52,18 @@ export interface CategoryInterface extends CategoryInputInterface {
   id: string;
   /** True while a transaction or budget still points to this category. */
   inUse: boolean;
-  type: TransactionType;
+  type: CategoryType;
 }
+
+export type CategoryType = "expense" | "income";
 
 export interface StatementImportInterface {
   accountId: string;
   openingBalance: null | number;
-  rows: Omit<StatementRowInterface, "isDuplicate">[];
+  rows: (Omit<StatementRowInterface, "isDuplicate" | "isPossibleTransfer"> & {
+    /** The other account, when this row is a transfer between own accounts. */
+    transferAccountId: null | string;
+  })[];
 }
 
 export interface StatementPreviewInterface {
@@ -77,33 +82,40 @@ export interface StatementRowInterface {
   date: string;
   detail: string;
   isDuplicate: boolean;
+  /** The description carries the owner's own name. */
+  isPossibleTransfer: boolean;
   name: string;
   /** Time in HH:mm:ss format. */
   time: string;
-  type: TransactionType;
+  /** The direction of the money in this statement's account. */
+  type: CategoryType;
 }
 
 export interface TransactionInputInterface {
+  /** The source account of a transfer. */
   accountId: string;
   amount: number;
-  categoryId: string;
+  categoryId?: null | string;
   /** Local date in YYYY-MM-DD format. */
   date: string;
   detail: string;
   name: string;
   /** Local time in HH:mm format. */
   time: string;
+  /** Set only on a transfer between own accounts. */
+  toAccountId?: null | string;
 }
 
 export interface TransactionInterface extends Omit<
   TransactionInputInterface,
   "categoryId"
 > {
-  /** Null until an imported transaction is given a category. */
+  /** Null on transfers, and until an imported transaction is given a category. */
   categoryId: null | string;
   id: string;
   source: TransactionSource;
   status: TransactionStatus;
+  toAccountId: null | string;
   type: TransactionType;
 }
 
@@ -111,4 +123,4 @@ export type TransactionSource = "email" | "import" | "manual" | "shortcut";
 
 export type TransactionStatus = "review" | "verified";
 
-export type TransactionType = "expense" | "income";
+export type TransactionType = "transfer" | CategoryType;

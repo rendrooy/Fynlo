@@ -12,6 +12,7 @@ erDiagram
     m_user ||--o{ m_budget : sets
     m_user ||--o{ t_transaction : records
     m_account ||--o{ t_transaction : "holds"
+    m_account |o--o{ t_transaction : "receives transfers"
     m_category ||--o{ t_transaction : "classifies"
     m_category ||--o| m_budget : "is limited by"
 
@@ -96,8 +97,9 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid account_id FK
-        uuid category_id FK "null until categorized"
-        varchar type "expense, income"
+        uuid to_account_id FK "transfers only"
+        uuid category_id FK "null on transfers and until categorized"
+        varchar type "expense, income, transfer"
         numeric amount "greater than 0"
         varchar name
         varchar detail
@@ -113,7 +115,8 @@ erDiagram
 ## Rules
 
 - `amount`, `value`, `opening_balance`, and `limit_amount` use `numeric(18,2)`.
-- Account balance is not stored. It is `opening_balance` plus income minus expenses, counting only transactions where `is_deleted` is false.
+- Account balance is not stored. It is `opening_balance` plus income and incoming transfers, minus expenses and outgoing transfers, counting only transactions where `is_deleted` is false.
+- A transfer is one row from `account_id` to `to_account_id`. The accounts must differ, it has no category, and it never counts as income, expense, or budget spending.
 - Account types belong to one user and their names are unique per user. A type cannot be deleted while accounts still use it.
 - Category groups belong to one user and have a type. Their names are unique per user and type. A group cannot be deleted while categories still use it.
 - A category takes its `type` from its group, and can only move to a group of the same type. It cannot be deleted while a transaction or budget still uses it.
@@ -123,6 +126,6 @@ erDiagram
 - Statement PDFs and their passwords are never stored.
 - `occurred_at` keeps seconds for imported transactions, which is how a repeated import is recognized.
 - `occurred_at` is sent and shown in Asia/Jakarta time.
-- Deleting an account also soft-deletes its transactions.
+- Deleting an account also soft-deletes its transactions, including transfers from or to it.
 - Every table except `m_user` carries `user_id`. Queries must always filter by it.
 - `is_deleted` keeps accounts, account types, assets, categories, category groups, and transactions recoverable. Budgets are deleted outright.

@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { ApiError } from "@/services/api";
-import { accountBalance } from "@/utils/finance";
+import { accountBalance, touchesAccount } from "@/utils/finance";
 import { formatRupiah } from "@/utils/format";
 
 import { AccountTypeForm } from "./components/AccountTypeForm";
@@ -51,7 +51,8 @@ export default function PageContent() {
 
   const deletingTransactionCount =
     deleting?.kind === "account"
-      ? transactions.filter((t) => t.accountId === deleting.account.id).length
+      ? transactions.filter((t) => touchesAccount(t, deleting.account.id))
+          .length
       : 0;
 
   function closeDelete() {

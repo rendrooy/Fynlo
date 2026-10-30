@@ -9,11 +9,11 @@ import type {
   CategoryGroupInterface,
   CategoryInputInterface,
   CategoryInterface,
+  CategoryType,
   StatementImportInterface,
   TransactionInputInterface,
   TransactionInterface,
   TransactionStatus,
-  TransactionType,
 } from "@fynlo/types";
 
 import {
@@ -69,7 +69,7 @@ interface FinanceValue {
   createAccount: (input: AccountInputInterface) => Promise<AccountInterface>;
   createAccountType: (name: string) => Promise<void>;
   createCategory: (input: CategoryInputInterface) => Promise<void>;
-  createCategoryGroup: (name: string, type: TransactionType) => Promise<void>;
+  createCategoryGroup: (name: string, type: CategoryType) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;
   deleteAccountType: (id: string) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
@@ -207,7 +207,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
 
   const createCategoryGroup = useCallback(
-    async (name: string, type: TransactionType) => {
+    async (name: string, type: CategoryType) => {
       const group = await createCategoryGroupRequest(name, type);
       setCategoryGroups((current) => [...current, group]);
     },
@@ -273,7 +273,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const deleteAccount = useCallback(async (id: string) => {
     await deleteAccountRequest(id);
     setAccounts((current) => current.filter((a) => a.id !== id));
-    setTransactions((current) => current.filter((t) => t.accountId !== id));
+    setTransactions((current) =>
+      current.filter((t) => t.accountId !== id && t.toAccountId !== id),
+    );
     setAccountTypes(await listAccountTypesRequest());
   }, []);
 

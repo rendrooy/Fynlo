@@ -5,7 +5,7 @@ import { isUuid } from "../utils/validation";
 interface TransactionRow {
   account_id: string;
   amount: string;
-  category_id: string;
+  category_id: null | string;
   date: string;
   detail: null | string;
   id: string;
@@ -13,6 +13,7 @@ interface TransactionRow {
   source: string;
   status: string;
   time: string;
+  to_account_id: null | string;
   type: string;
 }
 
@@ -24,7 +25,7 @@ const SELECT_TRANSACTION = `
   SELECT t.id, t.account_id, t.category_id, t.type, t.amount, t.name, t.detail,
          to_char(t.occurred_at AT TIME ZONE '${TIME_ZONE}', 'YYYY-MM-DD') AS date,
          to_char(t.occurred_at AT TIME ZONE '${TIME_ZONE}', 'HH24:MI') AS time,
-         t.source, t.status
+         t.source, t.status, t.to_account_id
   FROM t_transaction t`;
 const OCCURRED_AT = (parameter: string) =>
   `(${parameter}::timestamp AT TIME ZONE '${TIME_ZONE}')`;
@@ -40,6 +41,7 @@ const toTransaction = (row: TransactionRow) => ({
   source: row.source,
   status: row.status,
   time: row.time,
+  toAccountId: row.to_account_id,
   type: row.type,
 });
 
@@ -55,17 +57,27 @@ export async function createTransaction(
   const detail = parseDetail(input.detail);
   const occurredAt = parseOccurredAt(input.date, input.time);
   const accountId = await parseAccount(userId, input.accountId);
-  const category = await parseCategory(userId, input.categoryId);
+  // A transfer has a destination instead of a category.
+  const toAccountId = input.toAccountId
+    ? await parseTransferTarget(userId, input.toAccountId, accountId)
+    : null;
+  if (toAccountId && input.categoryId) {
+    throw invalid("A transfer can't have a category");
+  }
+  const category = toAccountId
+    ? null
+    : await parseCategory(userId, input.categoryId);
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO t_transaction
-       (user_id, account_id, category_id, type, amount, name, detail, occurred_at, source)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, ${OCCURRED_AT("$8")}, 'manual')
+       (user_id, account_id, to_account_id, category_id, type, amount, name, detail, occurred_at, source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${OCCURRED_AT("$9")}, 'manual')
      RETURNING id`,
     [
       userId,
       accountId,
-      category.id,
-      category.type,
+      toAccountId,
+      category?.id ?? null,
+      category?.type ?? "transfer",
       amount,
       name,
       detail,
@@ -162,15 +174,43 @@ export async function updateTransaction(
     assignments.push(`${column} = ${placeholder(`$${values.length}`)}`);
   };
 
-  if (input.accountId !== undefined) {
-    assign("account_id", await parseAccount(userId, input.accountId));
+  const { rows: current } = await pool.query<{
+    account_id: string;
+    to_account_id: null | string;
+  }>(
+    `SELECT account_id, to_account_id FROM t_transaction
+     WHERE user_id = $1 AND id = $2 AND NOT is_deleted`,
+    [userId, transactionId],
+  );
+  if (!current[0]) throw notFound();
+  if (input.toAccountId && input.categoryId) {
+    throw invalid("A transfer can't have a category");
   }
+  if (input.toAccountId === null && !input.categoryId) {
+    throw invalid("Choose a valid category");
+  }
+
+  const accountId =
+    input.accountId === undefined
+      ? current[0].account_id
+      : await parseAccount(userId, input.accountId);
+  if (input.accountId !== undefined) assign("account_id", accountId);
   if (input.amount !== undefined) assign("amount", parseAmount(input.amount));
   if (input.categoryId !== undefined) {
     // The type always follows the category, so the two can never disagree.
     const category = await parseCategory(userId, input.categoryId);
     assign("category_id", category.id);
     assign("type", category.type);
+    assign("to_account_id", null);
+  } else if (input.toAccountId) {
+    assign(
+      "to_account_id",
+      await parseTransferTarget(userId, input.toAccountId, accountId),
+    );
+    assign("category_id", null);
+    assign("type", "transfer");
+  } else if (accountId === current[0].to_account_id) {
+    throw invalid("Choose two different accounts");
   }
   if (input.date !== undefined || input.time !== undefined) {
     assign("occurred_at", parseOccurredAt(input.date, input.time), OCCURRED_AT);
@@ -225,4 +265,14 @@ async function parseCategory(userId: string, value: unknown) {
     if (rows[0]) return rows[0];
   }
   throw invalid("Choose a valid category");
+}
+
+async function parseTransferTarget(
+  userId: string,
+  value: unknown,
+  accountId: string,
+) {
+  const target = await parseAccount(userId, value);
+  if (target === accountId) throw invalid("Choose two different accounts");
+  return target;
 }

@@ -18,6 +18,9 @@ import { categoryOptions } from "@/utils/category-options";
 import { accountLabel } from "@/utils/finance";
 import { formatDayShort, formatRupiah } from "@/utils/format";
 
+// Marks a dropdown value as the other side of a transfer, not a category.
+const TRANSFER = "transfer:";
+
 const errorText = (error: unknown) =>
   error instanceof ApiError
     ? error.message
@@ -49,18 +52,26 @@ export default function PageContent() {
 
   const accountId = chosenAccountId || (accounts[0]?.id ?? "");
   const account = accounts.find((a) => a.id === accountId);
+  const otherAccounts = accounts.filter((a) => a.id !== accountId);
   const selected = (preview?.rows ?? [])
-    .map((row, index) => ({
-      ...row,
-      categoryId: chosenCategories[index] ?? row.categoryId,
-      index,
-    }))
+    .map((row, index) => {
+      const choice = chosenCategories[index] ?? row.categoryId;
+      const isTransfer = choice?.startsWith(TRANSFER) ?? false;
+      return {
+        ...row,
+        categoryId: isTransfer ? null : choice,
+        index,
+        transferAccountId: isTransfer
+          ? (choice as string).slice(TRANSFER.length)
+          : null,
+      };
+    })
     .filter((row) => !excluded.has(row.index));
   const income = selected
-    .filter((row) => row.type === "income")
+    .filter((row) => row.type === "income" && !row.transferAccountId)
     .reduce((sum, row) => sum + row.amount, 0);
   const expense = selected
-    .filter((row) => row.type === "expense")
+    .filter((row) => row.type === "expense" && !row.transferAccountId)
     .reduce((sum, row) => sum + row.amount, 0);
 
   async function read(event: FormEvent) {
@@ -107,6 +118,7 @@ export default function PageContent() {
           detail: row.detail,
           name: row.name,
           time: row.time,
+          transferAccountId: row.transferAccountId,
           type: row.type,
         })),
       });
@@ -272,6 +284,9 @@ export default function PageContent() {
                 {row.isDuplicate && (
                   <Badge tone="warning">Possible duplicate</Badge>
                 )}
+                {row.isPossibleTransfer &&
+                  !chosenCategories[index] &&
+                  otherAccounts.length > 0 && <Badge>Possible transfer</Badge>}
                 <div className="import-category">
                   <Select
                     aria-label={`Category for ${row.name}`}
@@ -281,9 +296,19 @@ export default function PageContent() {
                         [index]: value,
                       }))
                     }
-                    options={categoryOptions(
-                      categories.filter((c) => c.type === row.type),
-                    )}
+                    options={[
+                      ...categoryOptions(
+                        categories.filter((c) => c.type === row.type),
+                      ),
+                      ...otherAccounts.map((a) => ({
+                        group:
+                          row.type === "income"
+                            ? "Transfer from"
+                            : "Transfer to",
+                        label: accountLabel(a),
+                        value: `${TRANSFER}${a.id}`,
+                      })),
+                    ]}
                     placeholder="Uncategorized"
                     value={chosenCategories[index] ?? row.categoryId ?? ""}
                   />

@@ -15,7 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { CategoryIcon } from "@/components/CategoryIcon";
+import { TransactionIcon } from "@/components/CategoryIcon";
 import { sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
@@ -92,7 +92,12 @@ export default function PageContent() {
         <div className="card">
           <ListFilter aria-hidden="true" size={20} />
           <span>Uncategorized</span>
-          <b>{transactions.filter((t) => !t.categoryId).length}</b>
+          <b>
+            {
+              transactions.filter((t) => !t.categoryId && t.type !== "transfer")
+                .length
+            }
+          </b>
         </div>
       </div>
 
@@ -122,21 +127,25 @@ export default function PageContent() {
                 className={`card review-card ${done ? "reviewed" : ""}`}
                 key={t.id}
               >
-                <div className={`tx-icon cat-${category?.icon}`}>
-                  <CategoryIcon icon={category?.icon ?? ""} />
-                </div>
+                <TransactionIcon
+                  icon={t.type === "transfer" ? "transfer" : category?.icon}
+                />
                 <div className="review-main">
                   <b>{t.name}</b>
                   <span>
                     {formatDayShort(t.date)}, {t.time} · {accountLabel(account)}
                   </span>
                   <div>
-                    <Badge>{category?.name ?? "Uncategorized"}</Badge>
+                    <Badge>
+                      {t.type === "transfer"
+                        ? "Transfer"
+                        : (category?.name ?? "Uncategorized")}
+                    </Badge>
                     <Badge tone="warning">{sourceLabels[t.source]}</Badge>
                   </div>
                 </div>
                 <strong>
-                  {formatRupiah(t.type === "income" ? t.amount : -t.amount)}
+                  {formatRupiah(t.type === "expense" ? -t.amount : t.amount)}
                 </strong>
                 <div className="review-actions">
                   <Button kind="secondary" onClick={() => openDetails(t)}>

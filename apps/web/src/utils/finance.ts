@@ -22,16 +22,24 @@ export const inMonth = (transactions: TransactionInterface[], month: Date) => {
 export const previousMonth = (date = new Date()) =>
   new Date(date.getFullYear(), date.getMonth() - 1, 1);
 
+export const touchesAccount = (t: TransactionInterface, accountId: string) =>
+  t.accountId === accountId || t.toAccountId === accountId;
+
 export function accountBalance(
   account: AccountInterface,
   transactions: TransactionInterface[],
 ) {
-  return transactions
-    .filter((t) => t.accountId === account.id)
-    .reduce(
-      (balance, t) => balance + (t.type === "income" ? t.amount : -t.amount),
-      account.openingBalance,
-    );
+  return transactions.reduce(
+    (balance, t) => balance + signedAmount(t, account.id),
+    account.openingBalance,
+  );
+}
+
+/** How much a transaction changes one account's balance. */
+export function signedAmount(t: TransactionInterface, accountId: string) {
+  if (t.toAccountId === accountId) return t.amount;
+  if (t.accountId !== accountId) return 0;
+  return t.type === "income" ? t.amount : -t.amount;
 }
 
 export function totals(transactions: TransactionInterface[]) {
@@ -39,7 +47,7 @@ export function totals(transactions: TransactionInterface[]) {
   let expense = 0;
   for (const t of transactions) {
     if (t.type === "income") income += t.amount;
-    else expense += t.amount;
+    if (t.type === "expense") expense += t.amount;
   }
   return { expense, income, net: income - expense };
 }

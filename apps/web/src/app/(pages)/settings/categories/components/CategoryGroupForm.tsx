@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryGroupInterface, TransactionType } from "@fynlo/types";
+import type { CategoryGroupInterface, CategoryType } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
 import { type FormEvent, useState } from "react";
@@ -17,7 +17,7 @@ export function CategoryGroupForm({
   editing?: CategoryGroupInterface;
   onCancel: () => void;
   onSaved: (message: string) => void;
-  type: TransactionType;
+  type: CategoryType;
 }) {
   const { createCategoryGroup, renameCategoryGroup } = useFinance();
   const [name, setName] = useState(editing?.name ?? "");

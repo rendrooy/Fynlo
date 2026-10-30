@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeftRight,
   Car,
   Film,
   House,
@@ -35,4 +36,16 @@ export function CategoryIcon({
 }) {
   const Icon = icons[icon] ?? Tag;
   return <Icon aria-hidden="true" className={className} />;
+}
+
+export function TransactionIcon({ icon }: { icon?: string }) {
+  return icon === "transfer" ? (
+    <div className="tx-icon cat-swap">
+      <ArrowLeftRight aria-hidden="true" className="size-5" />
+    </div>
+  ) : (
+    <div className={`tx-icon cat-${icon}`}>
+      <CategoryIcon icon={icon ?? ""} />
+    </div>
+  );
 }

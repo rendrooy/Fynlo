@@ -6,13 +6,13 @@ import type {
   CategoryGroupInterface,
   CategoryInputInterface,
   CategoryInterface,
+  CategoryType,
   LoginResponseInterface,
   StatementImportInterface,
   StatementPreviewInterface,
   TransactionInputInterface,
   TransactionInterface,
   TransactionStatus,
-  TransactionType,
 } from "@fynlo/types";
 
 import {
@@ -120,10 +120,7 @@ export const deleteAccountRequest = (id: string) =>
 export const listCategoryGroupsRequest = () =>
   request<CategoryGroupInterface[]>("/category-groups");
 
-export const createCategoryGroupRequest = (
-  name: string,
-  type: TransactionType,
-) =>
+export const createCategoryGroupRequest = (name: string, type: CategoryType) =>
   request<CategoryGroupInterface>("/category-groups", {
     body: JSON.stringify({ name, type }),
     method: "POST",

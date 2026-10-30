@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryInterface, TransactionType } from "@fynlo/types";
+import type { CategoryInterface, CategoryType } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
 import { Select } from "@fynlo/ui/components/select";
@@ -30,7 +30,7 @@ export function CategoryForm({
   editing?: CategoryInterface;
   onCancel: () => void;
   onSaved: (message: string) => void;
-  type: TransactionType;
+  type: CategoryType;
 }) {
   const { categoryGroups, createCategory, updateCategory } = useFinance();
   const groups = categoryGroups.filter((g) => g.type === type);

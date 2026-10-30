@@ -11,9 +11,9 @@ import { TransactionList } from "@/components/TransactionList";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { categoryOptions } from "@/utils/category-options";
-import { sortNewestFirst } from "@/utils/finance";
+import { sortNewestFirst, touchesAccount } from "@/utils/finance";
 
-type TypeFilter = "all" | "expense" | "income";
+type TypeFilter = "all" | "expense" | "income" | "transfer";
 
 const PAGE_SIZE = 10;
 
@@ -33,7 +33,7 @@ export default function PageContent() {
       const category = categories.find((c) => c.id === t.categoryId);
       return (
         (type === "all" || t.type === type) &&
-        (accountId === "all" || t.accountId === accountId) &&
+        (accountId === "all" || touchesAccount(t, accountId)) &&
         (categoryId === "all" || t.categoryId === categoryId) &&
         (!needle ||
           `${t.name} ${t.detail} ${category?.name}`
@@ -59,6 +59,7 @@ export default function PageContent() {
         t.detail,
         categories.find((c) => c.id === t.categoryId)?.name ?? "",
         accounts.find((a) => a.id === t.accountId)?.name ?? "",
+        accounts.find((a) => a.id === t.toAccountId)?.name ?? "",
         t.type,
         t.amount,
       ]
@@ -66,7 +67,7 @@ export default function PageContent() {
         .join(","),
     );
     const csv = [
-      "date,time,name,detail,category,account,type,amount",
+      "date,time,name,detail,category,account,to_account,type,amount",
       ...rows,
     ].join("\n");
     const link = document.createElement("a");
@@ -152,10 +153,14 @@ export default function PageContent() {
             { label: "All", value: "all" },
             { label: "Income", value: "income" },
             { label: "Expenses", value: "expense" },
+            { label: "Transfers", value: "transfer" },
           ]}
           value={type}
         />
-        <span>{filtered.length} transactions</span>
+        <span>
+          {filtered.length}{" "}
+          {filtered.length === 1 ? "transaction" : "transactions"}
+        </span>
       </div>
 
       <section className="card table-card">

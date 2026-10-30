@@ -71,7 +71,9 @@ export async function deleteAccount(userId: string, accountId: string) {
      ),
      deleted_transactions AS (
        UPDATE t_transaction SET is_deleted = true, updated_time = now()
-       WHERE account_id IN (SELECT id FROM deleted) AND NOT is_deleted
+       WHERE (account_id IN (SELECT id FROM deleted)
+              OR to_account_id IN (SELECT id FROM deleted))
+         AND NOT is_deleted
      )
      SELECT id FROM deleted`,
     [userId, accountId],
