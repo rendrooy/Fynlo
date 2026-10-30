@@ -96,13 +96,13 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid account_id FK
-        uuid category_id FK
+        uuid category_id FK "null until categorized"
         varchar type "expense, income"
         numeric amount "greater than 0"
         varchar name
         varchar detail
         timestamptz occurred_at
-        varchar source "email, manual, shortcut"
+        varchar source "email, import, manual, shortcut"
         varchar status "review, verified"
         boolean is_deleted
         timestamptz created_time
@@ -119,5 +119,10 @@ erDiagram
 - A category takes its `type` from its group, and can only move to a group of the same type. It cannot be deleted while a transaction or budget still uses it.
 - A budget repeats every month, and each category has at most one.
 - A budget can only point to an `expense` category, and `t_transaction.type` must match its category's `type`. The services enforce both rules.
+- A transaction takes its `type` from its category. Only imported transactions can have no category, and they start in `review`.
+- Statement PDFs and their passwords are never stored.
+- `occurred_at` keeps seconds for imported transactions, which is how a repeated import is recognized.
+- `occurred_at` is sent and shown in Asia/Jakarta time.
+- Deleting an account also soft-deletes its transactions.
 - Every table except `m_user` carries `user_id`. Queries must always filter by it.
 - `is_deleted` keeps accounts, account types, assets, categories, category groups, and transactions recoverable. Budgets are deleted outright.

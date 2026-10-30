@@ -3,14 +3,15 @@
 import type { TransactionInterface, TransactionType } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
+import { Select } from "@fynlo/ui/components/select";
 import { Info } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { useFinance } from "@/providers/finance-provider";
+import { ApiError } from "@/services/api";
+import { categoryOptions } from "@/utils/category-options";
 import { accountLabel } from "@/utils/finance";
 import { formatGrouped, toIsoDate } from "@/utils/format";
-
-import { CategoryOptions } from "./CategoryOptions";
 
 export function TransactionForm({
   defaultType = "expense",
@@ -34,12 +35,14 @@ export function TransactionForm({
   const [name, setName] = useState(editing?.name ?? "");
   const [amount, setAmount] = useState(editing?.amount ?? 0);
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? "");
-  const [accountId, setAccountId] = useState(
-    editing?.accountId ?? accounts[0]?.id ?? "",
-  );
+  const [chosenAccountId, setAccountId] = useState(editing?.accountId ?? "");
+  // Accounts may finish loading after the form opens, so the default is derived.
+  const accountId = chosenAccountId || (accounts[0]?.id ?? "");
   const [date, setDate] = useState(editing?.date ?? toIsoDate(new Date()));
   const [detail, setDetail] = useState(editing?.detail ?? "");
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const options = categories.filter((c) => c.type === type);
 
@@ -48,11 +51,12 @@ export function TransactionForm({
     setCategoryId("");
   }
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
     if (amount <= 0 || !accountId || !categoryId || !date) return;
     const categoryName = categories.find((c) => c.id === categoryId)?.name;
+    const now = new Date();
     const values = {
       accountId,
       amount,
@@ -60,20 +64,27 @@ export function TransactionForm({
       date,
       detail: detail.trim(),
       name: name.trim() || categoryName || "Transaction",
-      type,
+      time:
+        editing?.time ??
+        `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
     };
-    if (editing) {
-      updateTransaction(editing.id, values);
-      onSaved("Transaction updated");
-    } else {
-      const now = new Date();
-      addTransaction({
-        ...values,
-        source: "manual",
-        status: "verified",
-        time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
-      });
-      onSaved("Transaction added");
+    setError("");
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateTransaction(editing.id, values);
+        onSaved("Transaction updated");
+      } else {
+        await addTransaction(values);
+        onSaved("Transaction added");
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Something went wrong. Please try again.",
+      );
+      setSaving(false);
     }
   }
 
@@ -141,26 +152,24 @@ export function TransactionForm({
         </label>
         <label>
           Account
-          <select
-            onChange={(event) => setAccountId(event.target.value)}
+          <Select
+            onChange={setAccountId}
+            options={accounts.map((account) => ({
+              label: accountLabel(account),
+              value: account.id,
+            }))}
+            placeholder="Choose an account"
             value={accountId}
-          >
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {accountLabel(account)}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label>
           Category
-          <select
-            onChange={(event) => setCategoryId(event.target.value)}
+          <Select
+            onChange={setCategoryId}
+            options={categoryOptions(options)}
+            placeholder="Choose a category"
             value={categoryId}
-          >
-            <option value="">Choose a category</option>
-            <CategoryOptions categories={options} />
-          </select>
+          />
           {submitted && !categoryId && (
             <span className="field-error">Choose a category</span>
           )}
@@ -177,12 +186,18 @@ export function TransactionForm({
         />
       </label>
 
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+
       <div className="modal-actions">
         <Button kind="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button disabled={accounts.length === 0} type="submit">
-          Save Transaction
+        <Button disabled={saving || accounts.length === 0} type="submit">
+          {saving ? "Saving..." : "Save Transaction"}
         </Button>
       </div>
     </form>

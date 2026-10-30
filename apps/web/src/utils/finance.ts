@@ -88,7 +88,7 @@ export function biggestIncrease(
       (month) =>
         spentByCategory(inMonth(transactions, month)).get(categoryId) ?? 0,
     ),
-    name: categories.find((c) => c.id === categoryId)?.name ?? "Other",
+    name: categories.find((c) => c.id === categoryId)?.name ?? "Uncategorized",
     percent: before > 0 ? Math.round((difference / before) * 100) : null,
   };
 }
@@ -164,7 +164,7 @@ export function expenseBreakdown(
         amount,
         color: category?.color ?? "#64748b",
         id: categoryId,
-        name: category?.name ?? "Other",
+        name: category?.name ?? "Uncategorized",
         percent: total > 0 ? Math.round((amount / total) * 100) : 0,
       };
     })
@@ -185,7 +185,10 @@ export function spentByCategory(transactions: TransactionInterface[]) {
   const spent = new Map<string, number>();
   for (const t of transactions) {
     if (t.type === "expense")
-      spent.set(t.categoryId, (spent.get(t.categoryId) ?? 0) + t.amount);
+      spent.set(
+        t.categoryId ?? "",
+        (spent.get(t.categoryId ?? "") ?? 0) + t.amount,
+      );
   }
   return spent;
 }

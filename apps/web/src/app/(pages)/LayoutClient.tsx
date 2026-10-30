@@ -86,7 +86,7 @@ function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { openSheet, toast } = useTransactionSheet();
   const { setTheme, theme } = useTheme();
-  const { transactions } = useFinance();
+  const { loadTransactions, transactions, transactionsStatus } = useFinance();
   const [collapsed, setCollapsed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -133,8 +133,8 @@ function AppShell({ children }: { children: ReactNode }) {
               <div className="note-icon">
                 <ShieldCheck aria-hidden="true" size={18} />
               </div>
-              <b>Prototype data</b>
-              <span>Changes reset when you reload</span>
+              <b>Budgets not saved yet</b>
+              <span>Budget changes reset when you reload</span>
             </>
           )}
         </div>
@@ -192,8 +192,19 @@ function AppShell({ children }: { children: ReactNode }) {
             <div className="avatar">{user?.initials}</div>
           </div>
         </header>
-        {/* Mock data depends on today's date, so it renders only in the browser to avoid differing from the built HTML. */}
+        {/* Pages depend on today's date, so they render only in the browser to avoid differing from the built HTML. */}
         <main>
+          {transactionsStatus === "error" && (
+            <div className="card load-error" role="alert">
+              <div>
+                <b>Couldn&apos;t load your transactions</b>
+                <span>Balances and reports may be incomplete.</span>
+              </div>
+              <Button kind="secondary" onClick={() => void loadTransactions()}>
+                Try again
+              </Button>
+            </div>
+          )}
           {mounted ? children : <div className="page">Loading...</div>}
         </main>
       </div>

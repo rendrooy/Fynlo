@@ -7,6 +7,11 @@ import type {
   CategoryInputInterface,
   CategoryInterface,
   LoginResponseInterface,
+  StatementImportInterface,
+  StatementPreviewInterface,
+  TransactionInputInterface,
+  TransactionInterface,
+  TransactionStatus,
   TransactionType,
 } from "@fynlo/types";
 
@@ -34,7 +39,10 @@ async function request<T>(path: string, init: RequestInit = {}) {
     response = await fetch(`${BASE_URL}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        // The browser sets its own boundary for file uploads.
+        ...(init.body instanceof FormData
+          ? {}
+          : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init.headers,
       },
@@ -150,3 +158,47 @@ export const updateCategoryRequest = (
 
 export const deleteCategoryRequest = (id: string) =>
   request<undefined>(`/categories/${id}`, { method: "DELETE" });
+
+export const listTransactionsRequest = () =>
+  request<TransactionInterface[]>("/transactions");
+
+export const createTransactionRequest = (input: TransactionInputInterface) =>
+  request<TransactionInterface>("/transactions", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const updateTransactionRequest = (
+  id: string,
+  changes: Partial<TransactionInputInterface> & { status?: TransactionStatus },
+) =>
+  request<TransactionInterface>(`/transactions/${id}`, {
+    body: JSON.stringify(changes),
+    method: "PATCH",
+  });
+
+export const previewStatementRequest = (input: {
+  accountId: string;
+  bank: string;
+  file: File;
+  password: string;
+}) => {
+  const body = new FormData();
+  body.set("accountId", input.accountId);
+  body.set("bank", input.bank);
+  body.set("password", input.password);
+  body.set("file", input.file);
+  return request<StatementPreviewInterface>("/statements/preview", {
+    body,
+    method: "POST",
+  });
+};
+
+export const importStatementRequest = (input: StatementImportInterface) =>
+  request<{ imported: number }>("/statements/import", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const deleteTransactionRequest = (id: string) =>
+  request<undefined>(`/transactions/${id}`, { method: "DELETE" });

@@ -3,6 +3,7 @@
 import type { CategoryInterface, TransactionType } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
+import { Select } from "@fynlo/ui/components/select";
 import { type FormEvent, useState } from "react";
 
 import { CategoryIcon, categoryIconNames } from "@/components/CategoryIcon";
@@ -90,17 +91,15 @@ export function CategoryForm({
 
       <label>
         Group
-        <select
-          onChange={(event) => setGroupId(event.target.value)}
+        <Select
+          onChange={setGroupId}
+          options={groups.map((group) => ({
+            label: group.name,
+            value: group.id,
+          }))}
+          placeholder="Add a group first"
           value={groupId}
-        >
-          {groups.length === 0 && <option value="">Add a group first</option>}
-          {groups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.name}
-            </option>
-          ))}
-        </select>
+        />
         {submitted && !groupId && (
           <span className="field-error">Add a group first</span>
         )}

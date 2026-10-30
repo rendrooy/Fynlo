@@ -20,6 +20,7 @@ import {
 
 import { sourceLabels, statusLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
+import { ApiError } from "@/services/api";
 import { accountLabel } from "@/utils/finance";
 import { formatDayShort, formatRupiah } from "@/utils/format";
 
@@ -32,7 +33,7 @@ export function TransactionDrawer({
   id: null | string;
   onClose: () => void;
   onEdit: (transaction: TransactionInterface) => void;
-  toast: (message: string) => void;
+  toast: (message: string, isError?: boolean) => void;
 }) {
   const { accounts, categories, deleteTransaction, transactions } =
     useFinance();
@@ -49,7 +50,7 @@ export function TransactionDrawer({
           `${formatDayShort(transaction.date)}, ${transaction.time}`,
         ],
         [Wallet, "Account", accountLabel(account)],
-        [ListFilter, "Category", category?.name ?? "Other"],
+        [ListFilter, "Category", category?.name ?? "Uncategorized"],
         [ArrowLeftRight, "Type", isIncome ? "Income" : "Expense"],
         [Link2, "Data source", sourceLabels[transaction.source]],
         [Info, "Note", transaction.detail || "-"],
@@ -107,9 +108,19 @@ export function TransactionDrawer({
             <Button
               kind="secondary"
               onClick={() => {
-                deleteTransaction(transaction.id);
-                onClose();
-                toast("Transaction deleted");
+                deleteTransaction(transaction.id)
+                  .then(() => {
+                    onClose();
+                    toast("Transaction deleted");
+                  })
+                  .catch((error: unknown) =>
+                    toast(
+                      error instanceof ApiError
+                        ? error.message
+                        : "Please try again.",
+                      true,
+                    ),
+                  );
               }}
             >
               <Trash2 aria-hidden="true" size={17} />

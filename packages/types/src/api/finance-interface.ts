@@ -55,23 +55,59 @@ export interface CategoryInterface extends CategoryInputInterface {
   type: TransactionType;
 }
 
-export interface TransactionInterface {
+export interface StatementImportInterface {
+  accountId: string;
+  openingBalance: null | number;
+  rows: Omit<StatementRowInterface, "isDuplicate">[];
+}
+
+export interface StatementPreviewInterface {
+  accountMask: null | string;
+  /** True when no saved transaction is older than this statement. */
+  canSetOpeningBalance: boolean;
+  closingBalance: number;
+  isDifferentAccount: boolean;
+  openingBalance: number;
+  rows: StatementRowInterface[];
+}
+
+export interface StatementRowInterface {
+  amount: number;
+  categoryId: null | string;
+  date: string;
+  detail: string;
+  isDuplicate: boolean;
+  name: string;
+  /** Time in HH:mm:ss format. */
+  time: string;
+  type: TransactionType;
+}
+
+export interface TransactionInputInterface {
   accountId: string;
   amount: number;
   categoryId: string;
   /** Local date in YYYY-MM-DD format. */
   date: string;
   detail: string;
-  id: string;
   name: string;
-  source: TransactionSource;
-  status: TransactionStatus;
   /** Local time in HH:mm format. */
   time: string;
+}
+
+export interface TransactionInterface extends Omit<
+  TransactionInputInterface,
+  "categoryId"
+> {
+  /** Null until an imported transaction is given a category. */
+  categoryId: null | string;
+  id: string;
+  source: TransactionSource;
+  status: TransactionStatus;
   type: TransactionType;
 }
 
-export type TransactionSource = "email" | "manual" | "shortcut";
+export type TransactionSource = "email" | "import" | "manual" | "shortcut";
 
 export type TransactionStatus = "review" | "verified";
 

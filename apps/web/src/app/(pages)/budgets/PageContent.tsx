@@ -3,14 +3,15 @@
 import { Badge } from "@fynlo/ui/components/badge";
 import { Button } from "@fynlo/ui/components/button";
 import { Modal } from "@fynlo/ui/components/modal";
+import { Select } from "@fynlo/ui/components/select";
 import { Pencil, Plus, Target } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { CategoryIcon } from "@/components/CategoryIcon";
-import { CategoryOptions } from "@/components/CategoryOptions";
 import { EmptyState } from "@/components/EmptyState";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
+import { categoryOptions } from "@/utils/category-options";
 import { budgetSummary } from "@/utils/finance";
 import { formatGrouped, formatRupiah } from "@/utils/format";
 
@@ -202,15 +203,14 @@ export default function PageContent() {
           <form noValidate onSubmit={submit}>
             <label>
               Category
-              <select
-                onChange={(event) =>
-                  setEditing({ ...editing, categoryId: event.target.value })
+              <Select
+                onChange={(categoryId) =>
+                  setEditing({ ...editing, categoryId })
                 }
+                options={categoryOptions(expenseCategories)}
+                placeholder="Choose a category"
                 value={editing.categoryId}
-              >
-                <option value="">Choose a category</option>
-                <CategoryOptions categories={expenseCategories} />
-              </select>
+              />
               {submitted && !editing.categoryId && (
                 <span className="field-error">Choose a category</span>
               )}

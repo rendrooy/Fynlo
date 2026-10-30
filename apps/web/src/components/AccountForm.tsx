@@ -3,6 +3,7 @@
 import type { AccountInterface } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
+import { Select } from "@fynlo/ui/components/select";
 import { type FormEvent, useState } from "react";
 
 import { useFinance } from "@/providers/finance-provider";
@@ -26,7 +27,7 @@ export function AccountForm({
 }: {
   editing?: AccountInterface;
   onCancel: () => void;
-  onSaved: (message: string) => void;
+  onSaved: (message: string, created?: AccountInterface) => void;
 }) {
   const { accountTypes, createAccount, updateAccount } = useFinance();
   const [name, setName] = useState(editing?.name ?? "");
@@ -66,8 +67,7 @@ export function AccountForm({
         await updateAccount(editing.id, input);
         onSaved("Account updated");
       } else {
-        await createAccount(input);
-        onSaved("Account added");
+        onSaved("Account added", await createAccount(input));
       }
     } catch (caught) {
       setError(
@@ -98,19 +98,15 @@ export function AccountForm({
       <div className="form-grid">
         <label>
           Type
-          <select
-            onChange={(event) => setAccountTypeId(event.target.value)}
+          <Select
+            onChange={setAccountTypeId}
+            options={accountTypes.map((type) => ({
+              label: type.name,
+              value: type.id,
+            }))}
+            placeholder="Add a type first"
             value={accountTypeId}
-          >
-            {accountTypes.length === 0 && (
-              <option value="">Add a type first</option>
-            )}
-            {accountTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
+          />
           {submitted && !accountTypeId && (
             <span className="field-error">Add an account type first</span>
           )}

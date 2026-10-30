@@ -9,7 +9,10 @@ import type {
   CategoryGroupInterface,
   CategoryInputInterface,
   CategoryInterface,
+  StatementImportInterface,
+  TransactionInputInterface,
   TransactionInterface,
+  TransactionStatus,
   TransactionType,
 } from "@fynlo/types";
 
@@ -29,22 +32,26 @@ import {
   createAccountTypeRequest,
   createCategoryGroupRequest,
   createCategoryRequest,
+  createTransactionRequest,
   deleteAccountRequest,
   deleteAccountTypeRequest,
   deleteCategoryGroupRequest,
   deleteCategoryRequest,
+  deleteTransactionRequest,
+  importStatementRequest,
   listAccountsRequest,
   listAccountTypesRequest,
   listCategoriesRequest,
   listCategoryGroupsRequest,
+  listTransactionsRequest,
   renameAccountTypeRequest,
   renameCategoryGroupRequest,
   updateAccountRequest,
   updateCategoryRequest,
+  updateTransactionRequest,
 } from "@/services/api";
 
 export type LoadStatus = "error" | "loading" | "ready";
-export type NewTransaction = Omit<TransactionInterface, "id">;
 
 // Stays empty until the assets API is connected.
 const assets: AssetInterface[] = [];
@@ -53,13 +60,13 @@ interface FinanceValue {
   accounts: AccountInterface[];
   accountsStatus: LoadStatus;
   accountTypes: AccountTypeInterface[];
-  addTransaction: (transaction: NewTransaction) => void;
+  addTransaction: (input: TransactionInputInterface) => Promise<void>;
   assets: AssetInterface[];
   budgets: BudgetInterface[];
   categories: CategoryInterface[];
   categoriesStatus: LoadStatus;
   categoryGroups: CategoryGroupInterface[];
-  createAccount: (input: AccountInputInterface) => Promise<void>;
+  createAccount: (input: AccountInputInterface) => Promise<AccountInterface>;
   createAccountType: (name: string) => Promise<void>;
   createCategory: (input: CategoryInputInterface) => Promise<void>;
   createCategoryGroup: (name: string, type: TransactionType) => Promise<void>;
@@ -67,13 +74,16 @@ interface FinanceValue {
   deleteAccountType: (id: string) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   deleteCategoryGroup: (id: string) => Promise<void>;
-  deleteTransaction: (id: string) => void;
+  deleteTransaction: (id: string) => Promise<void>;
+  importStatement: (input: StatementImportInterface) => Promise<void>;
   loadAccounts: () => Promise<void>;
   loadCategories: () => Promise<void>;
+  loadTransactions: () => Promise<void>;
   renameAccountType: (id: string, name: string) => Promise<void>;
   renameCategoryGroup: (id: string, name: string) => Promise<void>;
   saveBudget: (budget: BudgetInterface) => void;
   transactions: TransactionInterface[];
+  transactionsStatus: LoadStatus;
   updateAccount: (
     id: string,
     changes: Partial<AccountInputInterface> & { isExcluded?: boolean },
@@ -82,7 +92,12 @@ interface FinanceValue {
     id: string,
     changes: Partial<CategoryInputInterface>,
   ) => Promise<void>;
-  updateTransaction: (id: string, changes: Partial<NewTransaction>) => void;
+  updateTransaction: (
+    id: string,
+    changes: Partial<TransactionInputInterface> & {
+      status?: TransactionStatus;
+    },
+  ) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceValue | null>(null);
@@ -99,6 +114,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     CategoryGroupInterface[]
   >([]);
   const [transactions, setTransactions] = useState<TransactionInterface[]>([]);
+  const [transactionsStatus, setTransactionsStatus] =
+    useState<LoadStatus>("loading");
   const [budgets, setBudgets] = useState<BudgetInterface[]>([]);
 
   const loadAccounts = useCallback(async () => {
@@ -136,10 +153,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshCategories]);
 
+  const loadTransactions = useCallback(async () => {
+    setTransactionsStatus("loading");
+    try {
+      setTransactions(await listTransactionsRequest());
+      setTransactionsStatus("ready");
+    } catch {
+      setTransactionsStatus("error");
+    }
+  }, []);
+
   useEffect(() => {
     if (status === "authenticated") {
       void loadAccounts();
       void loadCategories();
+      void loadTransactions();
     } else if (status === "anonymous") {
       // Financial data must not outlive the session.
       setAccounts([]);
@@ -149,9 +177,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setCategoryGroups([]);
       setCategoriesStatus("loading");
       setTransactions([]);
+      setTransactionsStatus("loading");
       setBudgets([]);
     }
-  }, [loadAccounts, loadCategories, status]);
+  }, [loadAccounts, loadCategories, loadTransactions, status]);
 
   const createCategory = useCallback(
     async (input: CategoryInputInterface) => {
@@ -206,6 +235,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const account = await createAccountRequest(input);
     setAccounts((current) => [...current, account]);
     setAccountTypes(await listAccountTypesRequest());
+    return account;
   }, []);
 
   const createAccountType = useCallback(async (name: string) => {
@@ -243,26 +273,43 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const deleteAccount = useCallback(async (id: string) => {
     await deleteAccountRequest(id);
     setAccounts((current) => current.filter((a) => a.id !== id));
+    setTransactions((current) => current.filter((t) => t.accountId !== id));
     setAccountTypes(await listAccountTypesRequest());
   }, []);
 
-  const addTransaction = useCallback((transaction: NewTransaction) => {
-    setTransactions((current) => [
-      ...current,
-      { ...transaction, id: `tx-${Date.now()}` },
-    ]);
-  }, []);
+  const importStatement = useCallback(
+    async (input: StatementImportInterface) => {
+      await importStatementRequest(input);
+      await Promise.all([loadAccounts(), loadTransactions()]);
+    },
+    [loadAccounts, loadTransactions],
+  );
+
+  const addTransaction = useCallback(
+    async (input: TransactionInputInterface) => {
+      const transaction = await createTransactionRequest(input);
+      setTransactions((current) => [...current, transaction]);
+    },
+    [],
+  );
 
   const updateTransaction = useCallback(
-    (id: string, changes: Partial<NewTransaction>) => {
+    async (
+      id: string,
+      changes: Partial<TransactionInputInterface> & {
+        status?: TransactionStatus;
+      },
+    ) => {
+      const transaction = await updateTransactionRequest(id, changes);
       setTransactions((current) =>
-        current.map((t) => (t.id === id ? { ...t, ...changes } : t)),
+        current.map((t) => (t.id === id ? transaction : t)),
       );
     },
     [],
   );
 
-  const deleteTransaction = useCallback((id: string) => {
+  const deleteTransaction = useCallback(async (id: string) => {
+    await deleteTransactionRequest(id);
     setTransactions((current) => current.filter((t) => t.id !== id));
   }, []);
 
@@ -294,12 +341,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       deleteCategory,
       deleteCategoryGroup,
       deleteTransaction,
+      importStatement,
       loadAccounts,
       loadCategories,
+      loadTransactions,
       renameAccountType,
       renameCategoryGroup,
       saveBudget,
       transactions,
+      transactionsStatus,
       updateAccount,
       updateCategory,
       updateTransaction,
@@ -322,12 +372,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       deleteCategory,
       deleteCategoryGroup,
       deleteTransaction,
+      importStatement,
       loadAccounts,
       loadCategories,
+      loadTransactions,
       renameAccountType,
       renameCategoryGroup,
       saveBudget,
       transactions,
+      transactionsStatus,
       updateAccount,
       updateCategory,
       updateTransaction,

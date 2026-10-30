@@ -35,7 +35,7 @@ export function TransactionList({ items }: { items: TransactionInterface[] }) {
             </div>
             <div className="tx-main">
               <b>{t.name}</b>
-              <span>{t.detail || category?.name}</span>
+              <span>{t.detail || category?.name || "Uncategorized"}</span>
             </div>
             <div className="tx-meta">
               <b>{accountLabel(account)}</b>
@@ -43,7 +43,7 @@ export function TransactionList({ items }: { items: TransactionInterface[] }) {
                 {formatDayShort(t.date)}, {t.time}
               </span>
             </div>
-            <Badge>{category?.name}</Badge>
+            <Badge>{category?.name ?? "Uncategorized"}</Badge>
             <div className={`amount ${isIncome ? "positive" : ""}`}>
               <b>{formatRupiah(isIncome ? t.amount : -t.amount)}</b>
               <span>{statusLabels[t.status]}</span>

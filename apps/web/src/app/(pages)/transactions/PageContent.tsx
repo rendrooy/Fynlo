@@ -2,14 +2,15 @@
 
 import { Button } from "@fynlo/ui/components/button";
 import { Segmented } from "@fynlo/ui/components/segmented";
+import { Select } from "@fynlo/ui/components/select";
 import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { CategoryOptions } from "@/components/CategoryOptions";
 import { EmptyState } from "@/components/EmptyState";
 import { TransactionList } from "@/components/TransactionList";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
+import { categoryOptions } from "@/utils/category-options";
 import { sortNewestFirst } from "@/utils/finance";
 
 type TypeFilter = "all" | "expense" | "income";
@@ -17,7 +18,8 @@ type TypeFilter = "all" | "expense" | "income";
 const PAGE_SIZE = 10;
 
 export default function PageContent() {
-  const { accounts, categories, transactions } = useFinance();
+  const { accounts, categories, transactions, transactionsStatus } =
+    useFinance();
   const { openSheet, toast } = useTransactionSheet();
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TypeFilter>("all");
@@ -102,38 +104,37 @@ export default function PageContent() {
             value={query}
           />
         </div>
-        <select
+        <Select
           aria-label="Filter by account"
           className="select-filter"
-          onChange={(event) => {
-            setAccountId(event.target.value);
+          onChange={(next) => {
+            setAccountId(next);
             setPage(0);
           }}
+          options={[
+            { label: "All accounts", value: "all" },
+            ...accounts.map((account) => ({
+              label: account.name,
+              value: account.id,
+            })),
+          ]}
           value={accountId}
-        >
-          <option value="all">All accounts</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-        <select
+        />
+        <Select
           aria-label="Filter by category"
           className="select-filter"
-          onChange={(event) => {
-            setCategoryId(event.target.value);
+          onChange={(next) => {
+            setCategoryId(next);
             setPage(0);
           }}
+          options={[
+            { label: "All categories", value: "all" },
+            ...categoryOptions(
+              categories.filter((c) => type === "all" || c.type === type),
+            ),
+          ]}
           value={categoryId}
-        >
-          <option value="all">All categories</option>
-          <CategoryOptions
-            categories={categories.filter(
-              (c) => type === "all" || c.type === type,
-            )}
-          />
-        </select>
+        />
       </div>
 
       <div className="list-toolbar">
@@ -167,6 +168,10 @@ export default function PageContent() {
         </div>
         {visible.length > 0 ? (
           <TransactionList items={visible} />
+        ) : transactionsStatus === "loading" ? (
+          <div className="empty">
+            <span>Loading transactions...</span>
+          </div>
         ) : transactions.length === 0 ? (
           <EmptyState
             description="Transactions you record will appear here."

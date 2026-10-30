@@ -12,18 +12,21 @@ import {
   ShieldCheck,
   Upload,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { CategoryIcon } from "@/components/CategoryIcon";
-import { NOT_AVAILABLE, sourceLabels } from "@/constants";
+import { sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
+import { ApiError } from "@/services/api";
 import { accountLabel, sortNewestFirst } from "@/utils/finance";
 import { formatDayShort, formatRupiah, toIsoDate } from "@/utils/format";
 
 export default function PageContent() {
   const { accounts, categories, transactions, updateTransaction } =
     useFinance();
+  const router = useRouter();
   const { openDetails, openSheet, toast } = useTransactionSheet();
   const [confirmed, setConfirmed] = useState<string[]>([]);
 
@@ -128,7 +131,7 @@ export default function PageContent() {
                     {formatDayShort(t.date)}, {t.time} · {accountLabel(account)}
                   </span>
                   <div>
-                    <Badge>{category?.name}</Badge>
+                    <Badge>{category?.name ?? "Uncategorized"}</Badge>
                     <Badge tone="warning">{sourceLabels[t.source]}</Badge>
                   </div>
                 </div>
@@ -143,9 +146,19 @@ export default function PageContent() {
                   <Button
                     disabled={done}
                     onClick={() => {
-                      updateTransaction(t.id, { status: "verified" });
-                      setConfirmed([...confirmed, t.id]);
-                      toast("Transaction marked as reviewed");
+                      updateTransaction(t.id, { status: "verified" })
+                        .then(() => {
+                          setConfirmed((current) => [...current, t.id]);
+                          toast("Transaction marked as reviewed");
+                        })
+                        .catch((error: unknown) =>
+                          toast(
+                            error instanceof ApiError
+                              ? error.message
+                              : "Please try again.",
+                            true,
+                          ),
+                        );
                     }}
                   >
                     <Check aria-hidden="true" size={17} />
@@ -170,7 +183,7 @@ export default function PageContent() {
             <Plus aria-hidden="true" size={17} />
             Add Manually
           </Button>
-          <Button kind="ghost" onClick={() => toast(NOT_AVAILABLE)}>
+          <Button kind="ghost" onClick={() => router.push("/settings/import")}>
             <Upload aria-hidden="true" size={17} />
             Import Bank Statement
           </Button>

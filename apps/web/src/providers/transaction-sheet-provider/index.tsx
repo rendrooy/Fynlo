@@ -70,7 +70,7 @@ export function TransactionSheetProvider({
           setSelectedId(null);
           setForm({ editing: transaction });
         }}
-        toast={setMessage}
+        toast={value.toast}
       />
 
       <Modal
@@ -85,7 +85,7 @@ export function TransactionSheetProvider({
             onCancel={() => setForm(null)}
             onSaved={(text) => {
               setForm(null);
-              setMessage(text);
+              value.toast(text);
             }}
           />
         )}

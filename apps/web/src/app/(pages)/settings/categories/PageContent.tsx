@@ -51,9 +51,8 @@ export default function PageContent() {
 
   const groups = categoryGroups.filter((g) => g.type === type);
 
-  // Transactions and budgets are still held in the browser, so the server can't see them yet.
+  // Budgets are still held in the browser, so the server can't see them yet.
   const isInUse = (category: CategoryInterface) =>
-    category.inUse ||
     transactions.some((t) => t.categoryId === category.id) ||
     budgets.some((b) => b.categoryId === category.id);
 

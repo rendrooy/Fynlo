@@ -26,6 +26,17 @@ import {
   renameCategoryGroupHandler,
 } from "../controller/category-group-controller";
 import { liveHealth, readyHealth } from "../controller/health-controller";
+import {
+  importStatementHandler,
+  previewStatementHandler,
+  statementUpload,
+} from "../controller/statement-controller";
+import {
+  createTransactionHandler,
+  deleteTransactionHandler,
+  listTransactionsHandler,
+  updateTransactionHandler,
+} from "../controller/transaction-controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { loginRateLimit } from "../middleware/rate-limit.middleware";
 
@@ -64,5 +75,18 @@ router.get("/categories", authMiddleware, listCategoriesHandler);
 router.post("/categories", authMiddleware, createCategoryHandler);
 router.patch("/categories/:id", authMiddleware, updateCategoryHandler);
 router.delete("/categories/:id", authMiddleware, deleteCategoryHandler);
+
+router.get("/transactions", authMiddleware, listTransactionsHandler);
+router.post("/transactions", authMiddleware, createTransactionHandler);
+router.patch("/transactions/:id", authMiddleware, updateTransactionHandler);
+router.delete("/transactions/:id", authMiddleware, deleteTransactionHandler);
+
+router.post(
+  "/statements/preview",
+  authMiddleware,
+  statementUpload,
+  previewStatementHandler,
+);
+router.post("/statements/import", authMiddleware, importStatementHandler);
 
 export default router;

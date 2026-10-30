@@ -5,7 +5,7 @@ import type { AccountInterface, AccountTypeInterface } from "@fynlo/types";
 import { Badge } from "@fynlo/ui/components/badge";
 import { Button } from "@fynlo/ui/components/button";
 import { Modal } from "@fynlo/ui/components/modal";
-import { ArrowLeft, Plus, Tags, Wallet } from "lucide-react";
+import { ArrowLeft, Plus, Tags, Upload, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -44,9 +44,15 @@ export default function PageContent() {
   const [typeForm, setTypeForm] = useState<null | {
     editing?: AccountTypeInterface;
   }>(null);
+  const [importOffer, setImportOffer] = useState<AccountInterface | null>(null);
   const [deleting, setDeleting] = useState<Deleting | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const deletingTransactionCount =
+    deleting?.kind === "account"
+      ? transactions.filter((t) => t.accountId === deleting.account.id).length
+      : 0;
 
   function closeDelete() {
     setDeleting(null);
@@ -108,10 +114,16 @@ export default function PageContent() {
               <h2>Accounts</h2>
               <p>Excluded accounts stay here but don&apos;t count in totals.</p>
             </div>
-            <Button onClick={() => setAccountForm({})}>
-              <Plus aria-hidden="true" size={17} />
-              Add Account
-            </Button>
+            <div className="account-actions">
+              <Link className="btn secondary" href="/settings/import">
+                <Upload aria-hidden="true" size={17} />
+                Import Statement
+              </Link>
+              <Button onClick={() => setAccountForm({})}>
+                <Plus aria-hidden="true" size={17} />
+                Add Account
+              </Button>
+            </div>
           </div>
           {accounts.length === 0 ? (
             <div className="card">
@@ -238,9 +250,10 @@ export default function PageContent() {
           <AccountForm
             editing={accountForm.editing}
             onCancel={() => setAccountForm(null)}
-            onSaved={(message) => {
+            onSaved={(message, created) => {
               setAccountForm(null);
               toast(message);
+              setImportOffer(created ?? null);
             }}
           />
         )}
@@ -264,6 +277,28 @@ export default function PageContent() {
       </Modal>
 
       <Modal
+        onClose={() => setImportOffer(null)}
+        open={importOffer !== null}
+        title="Import past transactions?"
+      >
+        <p className="modal-text">
+          Add the history of <b>{importOffer?.name}</b> from a bank statement
+          PDF. You can also do this later.
+        </p>
+        <div className="modal-actions">
+          <Button kind="secondary" onClick={() => setImportOffer(null)}>
+            Later
+          </Button>
+          <Link
+            className="btn primary"
+            href={`/settings/import?accountId=${importOffer?.id}`}
+          >
+            Import Statement
+          </Link>
+        </div>
+      </Modal>
+
+      <Modal
         onClose={closeDelete}
         open={deleting !== null}
         title={deleting?.kind === "type" ? "Delete type?" : "Delete account?"}
@@ -276,8 +311,11 @@ export default function PageContent() {
             </>
           ) : (
             <>
-              <b>{deleting?.account.name}</b> will disappear from your accounts
-              and totals.
+              <b>{deleting?.account.name}</b> and{" "}
+              {deletingTransactionCount === 1
+                ? "its 1 transaction"
+                : `its ${deletingTransactionCount} transactions`}{" "}
+              will disappear from your accounts and totals.
             </>
           )}
         </p>

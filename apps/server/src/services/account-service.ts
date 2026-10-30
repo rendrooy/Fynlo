@@ -62,9 +62,18 @@ export async function createAccount(
 
 export async function deleteAccount(userId: string, accountId: string) {
   if (!isUuid(accountId)) throw notFound();
+  // One statement, so an account's transactions never outlive it in the totals.
   const { rowCount } = await pool.query(
-    `UPDATE m_account SET is_deleted = true, updated_time = now()
-     WHERE user_id = $1 AND id = $2 AND NOT is_deleted`,
+    `WITH deleted AS (
+       UPDATE m_account SET is_deleted = true, updated_time = now()
+       WHERE user_id = $1 AND id = $2 AND NOT is_deleted
+       RETURNING id
+     ),
+     deleted_transactions AS (
+       UPDATE t_transaction SET is_deleted = true, updated_time = now()
+       WHERE account_id IN (SELECT id FROM deleted) AND NOT is_deleted
+     )
+     SELECT id FROM deleted`,
     [userId, accountId],
   );
   if (!rowCount) throw notFound();
