@@ -1,5 +1,31 @@
+# dependencies
 node_modules
+
+# next.js
+.next
+/out/
+
+# production
+/build
 dist
-*.local
-*.tsbuildinfo
+
+# misc
 .DS_Store
+*.pem
+
+# debug
+.pnpm-debug.log*
+
+# other lockfiles that's not pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# local env files
+.env
+.env*.local
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+.turbo

@@ -1,0 +1,308 @@
+"use client";
+
+import { Badge } from "@fynlo/ui/components/badge";
+import { Button } from "@fynlo/ui/components/button";
+import { Segmented } from "@fynlo/ui/components/segmented";
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  ChartColumn,
+  Info,
+  type LucideIcon,
+  Plus,
+  Wallet,
+} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+
+import { CardHeader } from "@/components/CardHeader";
+import { CashflowChart } from "@/components/CashflowChart";
+import { ExpenseBreakdown } from "@/components/ExpenseBreakdown";
+import { TransactionList } from "@/components/TransactionList";
+import { NOT_AVAILABLE, sourceLabels } from "@/constants";
+import { useFinance } from "@/providers/finance-provider";
+import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
+import {
+  accountBalance,
+  biggestIncrease,
+  type CashflowPeriod,
+  cashflowSeries,
+  inMonth,
+  previousMonth,
+  sortNewestFirst,
+  totalBalance,
+  totals,
+} from "@/utils/finance";
+import { formatCompact, formatDayShort, formatRupiah } from "@/utils/format";
+
+export default function PageContent() {
+  const { accounts, categories, transactions } = useFinance();
+  const { toast } = useTransactionSheet();
+  const [period, setPeriod] = useState<CashflowPeriod>("daily");
+
+  const now = new Date();
+  const month = totals(inMonth(transactions, now));
+  const last = totals(inMonth(transactions, previousMonth(now)));
+  const balance = totalBalance(accounts, transactions);
+  const series = cashflowSeries(transactions, period);
+  const recent = sortNewestFirst(transactions).slice(0, 6);
+  const insight = biggestIncrease(categories, transactions);
+  const peak = Math.max(...(insight?.history ?? [1]), 1);
+
+  return (
+    <div className="page">
+      <div className="page-intro">
+        <div>
+          <h1>{greeting()}</h1>
+          <p>Keep an eye on your finances in one place.</p>
+        </div>
+        <Badge tone="success">
+          <span className="status-dot" />
+          All data up to date
+        </Badge>
+      </div>
+
+      <div className="metric-grid">
+        <MetricCard
+          change={percentChange(balance, balance - month.net)}
+          helper="vs start of month"
+          icon={Wallet}
+          title="Total Balance"
+          tone="emerald"
+          value={formatRupiah(balance)}
+        />
+        <MetricCard
+          change={percentChange(month.income, last.income)}
+          helper="vs last month"
+          icon={ArrowUp}
+          title="Total Income"
+          tone="blue"
+          value={formatRupiah(month.income)}
+        />
+        <MetricCard
+          change={percentChange(month.expense, last.expense)}
+          goodWhenUp={false}
+          helper="vs last month"
+          icon={ArrowDown}
+          title="Total Expenses"
+          tone="rose"
+          value={formatRupiah(month.expense)}
+        />
+        <MetricCard
+          change={percentChange(month.net, last.net)}
+          helper="vs last month"
+          icon={ChartColumn}
+          title="Net Cash Flow"
+          tone="violet"
+          value={formatRupiah(month.net)}
+        />
+      </div>
+
+      <div className="dashboard-grid">
+        <section className="card cashflow-card">
+          <CardHeader
+            action={
+              <Segmented
+                label="Cash flow period"
+                onChange={setPeriod}
+                options={[
+                  { label: "Daily", value: "daily" },
+                  { label: "Weekly", value: "weekly" },
+                  { label: "Monthly", value: "monthly" },
+                ]}
+                value={period}
+              />
+            }
+            subtitle="Income and expenses over time"
+            title="Cash Flow"
+          />
+          <div className="chart-legend">
+            <span>
+              <i className="dot income" />
+              Income <b>Rp{formatCompact(month.income)}</b>
+            </span>
+            <span>
+              <i className="dot expense" />
+              Expenses <b>Rp{formatCompact(month.expense)}</b>
+            </span>
+          </div>
+          <CashflowChart data={series} />
+        </section>
+        <section className="card expense-card">
+          <CardHeader
+            action={
+              <Link className="btn ghost" href="/analytics">
+                Details <ArrowRight aria-hidden="true" size={15} />
+              </Link>
+            }
+            subtitle="By category"
+            title="Expenses"
+          />
+          <ExpenseBreakdown />
+        </section>
+      </div>
+
+      <div className="section-heading">
+        <div>
+          <h2>Connected Accounts</h2>
+          <p>Balances based on recorded transactions.</p>
+        </div>
+        <Button kind="secondary" onClick={() => toast(NOT_AVAILABLE)}>
+          <Plus aria-hidden="true" size={17} />
+          Add Account
+        </Button>
+      </div>
+      <div className="accounts-grid">
+        {accounts.map((account) => {
+          const latest = sortNewestFirst(
+            transactions.filter((t) => t.accountId === account.id),
+          )[0];
+          const estimated = account.source === "email";
+          return (
+            <div className="account-card" key={account.id}>
+              <div className="account-head">
+                <div
+                  className="bank-logo"
+                  style={{ background: account.color }}
+                >
+                  {account.name[0]}
+                </div>
+                <div>
+                  <b>{account.name}</b>
+                  <span>•• {account.mask}</span>
+                </div>
+              </div>
+              <div className="account-label">
+                {estimated ? "ESTIMATED" : "RECORDED"} BALANCE
+              </div>
+              <div className="account-balance">
+                {formatRupiah(accountBalance(account, transactions))}
+              </div>
+              <div className="account-foot">
+                <div>
+                  <span>Source</span>
+                  <b>{sourceLabels[account.source]}</b>
+                </div>
+                <div>
+                  <span>Last activity</span>
+                  <b>{latest ? formatDayShort(latest.date) : "-"}</b>
+                </div>
+              </div>
+              <Badge tone={estimated ? "warning" : "success"}>
+                <span className="status-dot" />
+                {estimated ? "Based on transactions" : "Confirmed manually"}
+              </Badge>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="content-split">
+        <section className="card recent-card">
+          <CardHeader
+            action={
+              <Link className="btn ghost" href="/transactions">
+                See All <ArrowRight aria-hidden="true" size={15} />
+              </Link>
+            }
+            subtitle="Latest activity across all accounts"
+            title="Recent Transactions"
+          />
+          <TransactionList items={recent} />
+        </section>
+        <aside className="insight-card">
+          <div className="insight-top">
+            <div className="spark">
+              <ChartColumn aria-hidden="true" size={20} />
+            </div>
+            <Badge tone="success">THIS MONTH&apos;S INSIGHT</Badge>
+          </div>
+          {insight ? (
+            <>
+              <h3>
+                {insight.name} spending is up
+                {insight.percent !== null && ` ${insight.percent}%`}
+              </h3>
+              <p>
+                You spent <b>{formatRupiah(insight.difference)}</b> more on{" "}
+                {insight.name.toLowerCase()} than last month.
+              </p>
+              <div aria-hidden="true" className="mini-bars">
+                {insight.history.map((value, index) => (
+                  <i
+                    key={index}
+                    style={{
+                      height: `${Math.max((value / peak) * 100, 6)}%`,
+                      opacity: index === insight.history.length - 1 ? 1 : 0.55,
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <h3>No category grew this month</h3>
+              <p>Every category is at or below last month&apos;s spending.</p>
+            </>
+          )}
+          <Link className="btn secondary" href="/analytics">
+            See details <ArrowRight aria-hidden="true" size={15} />
+          </Link>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  return hour < 18 ? "Good afternoon" : "Good evening";
+}
+
+function MetricCard({
+  change,
+  goodWhenUp = true,
+  helper,
+  icon: Icon,
+  title,
+  tone,
+  value,
+}: {
+  change: number;
+  goodWhenUp?: boolean;
+  helper: string;
+  icon: LucideIcon;
+  title: string;
+  tone: string;
+  value: string;
+}) {
+  const up = change >= 0;
+  const Arrow = up ? ArrowUp : ArrowDown;
+  return (
+    <div className="card metric-card">
+      <div className={`metric-icon ${tone}`}>
+        <Icon aria-hidden="true" size={20} />
+      </div>
+      <div className="metric-title">
+        {title}
+        <Info aria-hidden="true" size={14} />
+      </div>
+      <div className="metric-value">{value}</div>
+      <div className="metric-foot">
+        <Badge tone={up === goodWhenUp ? "success" : "danger"}>
+          <Arrow aria-hidden="true" size={12} />
+          {up ? "+" : ""}
+          {change}%
+        </Badge>
+        <span>{helper}</span>
+      </div>
+    </div>
+  );
+}
+
+function percentChange(current: number, previous: number) {
+  if (previous === 0) return 0;
+  return Math.round(((current - previous) / Math.abs(previous)) * 1000) / 10;
+}

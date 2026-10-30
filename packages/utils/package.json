@@ -1,0 +1,17 @@
+{
+  "name": "@fynlo/utils",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles": "./src/styles.ts"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.7.0"
+  }
+}
