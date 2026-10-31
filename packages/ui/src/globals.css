@@ -152,3 +152,7 @@ dialog::backdrop{background:rgba(15,23,42,.42);backdrop-filter:blur(3px)}
 .import-row>strong{min-width:112px;text-align:right}
 .type-tabs.three{grid-template-columns:repeat(3,1fr)}
 .amount.neutral b{color:var(--text)}
+.budget-period-filter{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.budget-period-filter .select-trigger{width:220px}
+.budget-period-filter>span{font-size:12px;color:var(--muted)}
+@media(max-width:800px){.page-intro>.account-actions{flex-wrap:wrap;justify-content:flex-start}.page-intro:has(>.account-actions){flex-direction:column;align-items:flex-start}}

@@ -15,7 +15,6 @@ import {
   Moon,
   Plus,
   Settings,
-  ShieldCheck,
   Sun,
   Target,
   Wallet,
@@ -127,17 +126,6 @@ function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="sidebar-note">
-          {!collapsed && (
-            <>
-              <div className="note-icon">
-                <ShieldCheck aria-hidden="true" size={18} />
-              </div>
-              <b>Budgets not saved yet</b>
-              <span>Budget changes reset when you reload</span>
-            </>
-          )}
-        </div>
         <button
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="collapse-btn"

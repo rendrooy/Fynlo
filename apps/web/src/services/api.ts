@@ -3,6 +3,11 @@ import type {
   AccountInterface,
   AccountTypeInterface,
   AuthUserInterface,
+  BudgetGroupInterface,
+  BudgetInputInterface,
+  BudgetInterface,
+  BudgetPeriodInputInterface,
+  BudgetPeriodInterface,
   CategoryGroupInterface,
   CategoryInputInterface,
   CategoryInterface,
@@ -155,6 +160,65 @@ export const updateCategoryRequest = (
 
 export const deleteCategoryRequest = (id: string) =>
   request<undefined>(`/categories/${id}`, { method: "DELETE" });
+
+export const listBudgetsRequest = () => request<BudgetInterface[]>("/budgets");
+
+export const createBudgetRequest = (input: BudgetInputInterface) =>
+  request<BudgetInterface>("/budgets", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const updateBudgetRequest = (
+  id: string,
+  changes: Partial<Omit<BudgetInputInterface, "categoryId">>,
+) =>
+  request<BudgetInterface>(`/budgets/${id}`, {
+    body: JSON.stringify(changes),
+    method: "PATCH",
+  });
+
+export const deleteBudgetRequest = (id: string) =>
+  request<undefined>(`/budgets/${id}`, { method: "DELETE" });
+
+export const listBudgetPeriodsRequest = () =>
+  request<BudgetPeriodInterface[]>("/budget-periods");
+
+export const createBudgetPeriodRequest = (input: BudgetPeriodInputInterface) =>
+  request<BudgetPeriodInterface>("/budget-periods", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const updateBudgetPeriodRequest = (
+  id: string,
+  input: BudgetPeriodInputInterface,
+) =>
+  request<BudgetPeriodInterface>(`/budget-periods/${id}`, {
+    body: JSON.stringify(input),
+    method: "PATCH",
+  });
+
+export const deleteBudgetPeriodRequest = (id: string) =>
+  request<undefined>(`/budget-periods/${id}`, { method: "DELETE" });
+
+export const listBudgetGroupsRequest = () =>
+  request<BudgetGroupInterface[]>("/budget-groups");
+
+export const createBudgetGroupRequest = (name: string) =>
+  request<BudgetGroupInterface>("/budget-groups", {
+    body: JSON.stringify({ name }),
+    method: "POST",
+  });
+
+export const renameBudgetGroupRequest = (id: string, name: string) =>
+  request<BudgetGroupInterface>(`/budget-groups/${id}`, {
+    body: JSON.stringify({ name }),
+    method: "PATCH",
+  });
+
+export const deleteBudgetGroupRequest = (id: string) =>
+  request<undefined>(`/budget-groups/${id}`, { method: "DELETE" });
 
 export const listTransactionsRequest = () =>
   request<TransactionInterface[]>("/transactions");

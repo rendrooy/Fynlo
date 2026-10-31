@@ -14,6 +14,11 @@ import {
 } from "../controller/account-type-controller";
 import { loginHandler, meHandler } from "../controller/auth-controller";
 import {
+  budgetGroupHandlers,
+  budgetHandlers,
+  budgetPeriodHandlers,
+} from "../controller/budget-controller";
+import {
   createCategoryHandler,
   deleteCategoryHandler,
   listCategoriesHandler,
@@ -75,6 +80,29 @@ router.get("/categories", authMiddleware, listCategoriesHandler);
 router.post("/categories", authMiddleware, createCategoryHandler);
 router.patch("/categories/:id", authMiddleware, updateCategoryHandler);
 router.delete("/categories/:id", authMiddleware, deleteCategoryHandler);
+
+router.get("/budgets", authMiddleware, budgetHandlers.list);
+router.post("/budgets", authMiddleware, budgetHandlers.create);
+router.patch("/budgets/:id", authMiddleware, budgetHandlers.update);
+router.delete("/budgets/:id", authMiddleware, budgetHandlers.remove);
+
+router.get("/budget-periods", authMiddleware, budgetPeriodHandlers.list);
+router.post("/budget-periods", authMiddleware, budgetPeriodHandlers.create);
+router.patch(
+  "/budget-periods/:id",
+  authMiddleware,
+  budgetPeriodHandlers.update,
+);
+router.delete(
+  "/budget-periods/:id",
+  authMiddleware,
+  budgetPeriodHandlers.remove,
+);
+
+router.get("/budget-groups", authMiddleware, budgetGroupHandlers.list);
+router.post("/budget-groups", authMiddleware, budgetGroupHandlers.create);
+router.patch("/budget-groups/:id", authMiddleware, budgetGroupHandlers.update);
+router.delete("/budget-groups/:id", authMiddleware, budgetGroupHandlers.remove);
 
 router.get("/transactions", authMiddleware, listTransactionsHandler);
 router.post("/transactions", authMiddleware, createTransactionHandler);

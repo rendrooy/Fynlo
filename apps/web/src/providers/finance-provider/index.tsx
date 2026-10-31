@@ -5,7 +5,11 @@ import type {
   AccountInterface,
   AccountTypeInterface,
   AssetInterface,
+  BudgetGroupInterface,
+  BudgetInputInterface,
   BudgetInterface,
+  BudgetPeriodInputInterface,
+  BudgetPeriodInterface,
   CategoryGroupInterface,
   CategoryInputInterface,
   CategoryInterface,
@@ -30,23 +34,35 @@ import { useAuth } from "@/providers/auth-provider";
 import {
   createAccountRequest,
   createAccountTypeRequest,
+  createBudgetGroupRequest,
+  createBudgetPeriodRequest,
+  createBudgetRequest,
   createCategoryGroupRequest,
   createCategoryRequest,
   createTransactionRequest,
   deleteAccountRequest,
   deleteAccountTypeRequest,
+  deleteBudgetGroupRequest,
+  deleteBudgetPeriodRequest,
+  deleteBudgetRequest,
   deleteCategoryGroupRequest,
   deleteCategoryRequest,
   deleteTransactionRequest,
   importStatementRequest,
   listAccountsRequest,
   listAccountTypesRequest,
+  listBudgetGroupsRequest,
+  listBudgetPeriodsRequest,
+  listBudgetsRequest,
   listCategoriesRequest,
   listCategoryGroupsRequest,
   listTransactionsRequest,
   renameAccountTypeRequest,
+  renameBudgetGroupRequest,
   renameCategoryGroupRequest,
   updateAccountRequest,
+  updateBudgetPeriodRequest,
+  updateBudgetRequest,
   updateCategoryRequest,
   updateTransactionRequest,
 } from "@/services/api";
@@ -62,31 +78,49 @@ interface FinanceValue {
   accountTypes: AccountTypeInterface[];
   addTransaction: (input: TransactionInputInterface) => Promise<void>;
   assets: AssetInterface[];
+  budgetGroups: BudgetGroupInterface[];
+  budgetPeriods: BudgetPeriodInterface[];
   budgets: BudgetInterface[];
+  budgetsStatus: LoadStatus;
   categories: CategoryInterface[];
   categoriesStatus: LoadStatus;
   categoryGroups: CategoryGroupInterface[];
   createAccount: (input: AccountInputInterface) => Promise<AccountInterface>;
   createAccountType: (name: string) => Promise<void>;
+  createBudget: (input: BudgetInputInterface) => Promise<void>;
+  createBudgetGroup: (name: string) => Promise<void>;
+  createBudgetPeriod: (input: BudgetPeriodInputInterface) => Promise<void>;
   createCategory: (input: CategoryInputInterface) => Promise<void>;
   createCategoryGroup: (name: string, type: CategoryType) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;
   deleteAccountType: (id: string) => Promise<void>;
+  deleteBudget: (id: string) => Promise<void>;
+  deleteBudgetGroup: (id: string) => Promise<void>;
+  deleteBudgetPeriod: (id: string) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   deleteCategoryGroup: (id: string) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   importStatement: (input: StatementImportInterface) => Promise<void>;
   loadAccounts: () => Promise<void>;
+  loadBudgets: () => Promise<void>;
   loadCategories: () => Promise<void>;
   loadTransactions: () => Promise<void>;
   renameAccountType: (id: string, name: string) => Promise<void>;
+  renameBudgetGroup: (id: string, name: string) => Promise<void>;
   renameCategoryGroup: (id: string, name: string) => Promise<void>;
-  saveBudget: (budget: BudgetInterface) => void;
   transactions: TransactionInterface[];
   transactionsStatus: LoadStatus;
   updateAccount: (
     id: string,
     changes: Partial<AccountInputInterface> & { isExcluded?: boolean },
+  ) => Promise<void>;
+  updateBudget: (
+    id: string,
+    changes: Partial<Omit<BudgetInputInterface, "categoryId">>,
+  ) => Promise<void>;
+  updateBudgetPeriod: (
+    id: string,
+    input: BudgetPeriodInputInterface,
   ) => Promise<void>;
   updateCategory: (
     id: string,
@@ -117,6 +151,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [transactionsStatus, setTransactionsStatus] =
     useState<LoadStatus>("loading");
   const [budgets, setBudgets] = useState<BudgetInterface[]>([]);
+  const [budgetGroups, setBudgetGroups] = useState<BudgetGroupInterface[]>([]);
+  const [budgetPeriods, setBudgetPeriods] = useState<BudgetPeriodInterface[]>(
+    [],
+  );
+  const [budgetsStatus, setBudgetsStatus] = useState<LoadStatus>("loading");
 
   const loadAccounts = useCallback(async () => {
     setAccountsStatus("loading");
@@ -153,6 +192,23 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshCategories]);
 
+  const loadBudgets = useCallback(async () => {
+    setBudgetsStatus("loading");
+    try {
+      const [loadedBudgets, loadedPeriods, loadedGroups] = await Promise.all([
+        listBudgetsRequest(),
+        listBudgetPeriodsRequest(),
+        listBudgetGroupsRequest(),
+      ]);
+      setBudgets(loadedBudgets);
+      setBudgetPeriods(loadedPeriods);
+      setBudgetGroups(loadedGroups);
+      setBudgetsStatus("ready");
+    } catch {
+      setBudgetsStatus("error");
+    }
+  }, []);
+
   const loadTransactions = useCallback(async () => {
     setTransactionsStatus("loading");
     try {
@@ -168,6 +224,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       void loadAccounts();
       void loadCategories();
       void loadTransactions();
+      void loadBudgets();
     } else if (status === "anonymous") {
       // Financial data must not outlive the session.
       setAccounts([]);
@@ -179,8 +236,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       setTransactions([]);
       setTransactionsStatus("loading");
       setBudgets([]);
+      setBudgetGroups([]);
+      setBudgetPeriods([]);
+      setBudgetsStatus("loading");
     }
-  }, [loadAccounts, loadCategories, loadTransactions, status]);
+  }, [loadAccounts, loadBudgets, loadCategories, loadTransactions, status]);
 
   const createCategory = useCallback(
     async (input: CategoryInputInterface) => {
@@ -315,12 +375,63 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setTransactions((current) => current.filter((t) => t.id !== id));
   }, []);
 
-  const saveBudget = useCallback((budget: BudgetInterface) => {
-    setBudgets((current) =>
-      current.some((b) => b.categoryId === budget.categoryId)
-        ? current.map((b) => (b.categoryId === budget.categoryId ? budget : b))
-        : [...current, budget],
-    );
+  const createBudget = useCallback(async (input: BudgetInputInterface) => {
+    const budget = await createBudgetRequest(input);
+    setBudgets((current) => [...current, budget]);
+  }, []);
+
+  const updateBudget = useCallback(
+    async (
+      id: string,
+      changes: Partial<Omit<BudgetInputInterface, "categoryId">>,
+    ) => {
+      const budget = await updateBudgetRequest(id, changes);
+      setBudgets((current) => current.map((b) => (b.id === id ? budget : b)));
+    },
+    [],
+  );
+
+  const deleteBudget = useCallback(async (id: string) => {
+    await deleteBudgetRequest(id);
+    setBudgets((current) => current.filter((b) => b.id !== id));
+  }, []);
+
+  const createBudgetPeriod = useCallback(
+    async (input: BudgetPeriodInputInterface) => {
+      const period = await createBudgetPeriodRequest(input);
+      setBudgetPeriods((current) => [...current, period]);
+    },
+    [],
+  );
+
+  const updateBudgetPeriod = useCallback(
+    async (id: string, input: BudgetPeriodInputInterface) => {
+      const period = await updateBudgetPeriodRequest(id, input);
+      setBudgetPeriods((current) =>
+        current.map((p) => (p.id === id ? period : p)),
+      );
+    },
+    [],
+  );
+
+  const deleteBudgetPeriod = useCallback(async (id: string) => {
+    await deleteBudgetPeriodRequest(id);
+    setBudgetPeriods((current) => current.filter((p) => p.id !== id));
+  }, []);
+
+  const createBudgetGroup = useCallback(async (name: string) => {
+    const group = await createBudgetGroupRequest(name);
+    setBudgetGroups((current) => [...current, group]);
+  }, []);
+
+  const renameBudgetGroup = useCallback(async (id: string, name: string) => {
+    const group = await renameBudgetGroupRequest(id, name);
+    setBudgetGroups((current) => current.map((g) => (g.id === id ? group : g)));
+  }, []);
+
+  const deleteBudgetGroup = useCallback(async (id: string) => {
+    await deleteBudgetGroupRequest(id);
+    setBudgetGroups((current) => current.filter((g) => g.id !== id));
   }, []);
 
   const value = useMemo(
@@ -330,29 +441,41 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       accountTypes,
       addTransaction,
       assets,
+      budgetGroups,
+      budgetPeriods,
       budgets,
+      budgetsStatus,
       categories,
       categoriesStatus,
       categoryGroups,
       createAccount,
       createAccountType,
+      createBudget,
+      createBudgetGroup,
+      createBudgetPeriod,
       createCategory,
       createCategoryGroup,
       deleteAccount,
       deleteAccountType,
+      deleteBudget,
+      deleteBudgetGroup,
+      deleteBudgetPeriod,
       deleteCategory,
       deleteCategoryGroup,
       deleteTransaction,
       importStatement,
       loadAccounts,
+      loadBudgets,
       loadCategories,
       loadTransactions,
       renameAccountType,
+      renameBudgetGroup,
       renameCategoryGroup,
-      saveBudget,
       transactions,
       transactionsStatus,
       updateAccount,
+      updateBudget,
+      updateBudgetPeriod,
       updateCategory,
       updateTransaction,
     }),
@@ -361,7 +484,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       accountsStatus,
       accountTypes,
       addTransaction,
+      budgetGroups,
+      budgetPeriods,
       budgets,
+      budgetsStatus,
       categories,
       categoriesStatus,
       categoryGroups,
@@ -371,16 +497,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       createCategoryGroup,
       deleteAccount,
       deleteAccountType,
+      deleteBudget,
+      createBudget,
+      createBudgetGroup,
+      createBudgetPeriod,
+      deleteBudgetGroup,
+      deleteBudgetPeriod,
+      renameBudgetGroup,
+      updateBudget,
+      updateBudgetPeriod,
       deleteCategory,
       deleteCategoryGroup,
       deleteTransaction,
       importStatement,
       loadAccounts,
+      loadBudgets,
       loadCategories,
       loadTransactions,
       renameAccountType,
       renameCategoryGroup,
-      saveBudget,
       transactions,
       transactionsStatus,
       updateAccount,

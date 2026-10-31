@@ -15,6 +15,7 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Target,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -39,7 +40,7 @@ interface SettingsItem {
 export default function PageContent() {
   const router = useRouter();
   const { signOut, user } = useAuth();
-  const { accounts, categories } = useFinance();
+  const { accounts, budgetPeriods, categories } = useFinance();
   const { toast } = useTransactionSheet();
   const { setTheme, theme } = useTheme();
   const dark = theme === "dark";
@@ -66,6 +67,13 @@ export default function PageContent() {
           icon: ListFilter,
           title: "Transaction categories",
           value: `${categories.length} ${categories.length === 1 ? "category" : "categories"}`,
+        },
+        {
+          action: () => router.push("/settings/budgets"),
+          description: "Set when budgets reset and how they are grouped",
+          icon: Target,
+          title: "Budget periods & groups",
+          value: `${budgetPeriods.length} ${budgetPeriods.length === 1 ? "period" : "periods"}`,
         },
         {
           action: signOut,

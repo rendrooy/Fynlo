@@ -14,7 +14,11 @@ erDiagram
     m_account ||--o{ t_transaction : "holds"
     m_account |o--o{ t_transaction : "receives transfers"
     m_category ||--o{ t_transaction : "classifies"
-    m_category ||--o| m_budget : "is limited by"
+    m_category ||--o{ m_budget : "is limited by"
+    m_user ||--o{ m_budget_period : defines
+    m_user ||--o{ m_budget_group : defines
+    m_budget_period ||--o{ m_budget : schedules
+    m_budget_group ||--o{ m_budget : organizes
 
     m_user {
         uuid id PK
@@ -87,8 +91,32 @@ erDiagram
     m_budget {
         uuid id PK
         uuid user_id FK
-        uuid category_id FK,UK
+        uuid category_id FK
+        uuid period_id FK
+        uuid group_id FK
         numeric limit_amount
+        timestamptz created_time
+        timestamptz updated_time
+    }
+
+    m_budget_period {
+        uuid id PK
+        uuid user_id FK
+        varchar name
+        varchar unit "day, week, month, year, once"
+        integer interval_count
+        date start_date
+        date end_date "once only"
+        boolean is_deleted
+        timestamptz created_time
+        timestamptz updated_time
+    }
+
+    m_budget_group {
+        uuid id PK
+        uuid user_id FK
+        varchar name
+        boolean is_deleted
         timestamptz created_time
         timestamptz updated_time
     }
@@ -120,7 +148,8 @@ erDiagram
 - Account types belong to one user and their names are unique per user. A type cannot be deleted while accounts still use it.
 - Category groups belong to one user and have a type. Their names are unique per user and type. A group cannot be deleted while categories still use it.
 - A category takes its `type` from its group, and can only move to a group of the same type. It cannot be deleted while a transaction or budget still uses it.
-- A budget repeats every month, and each category has at most one.
+- A budget follows its period, and a category has at most one budget per period. Spending counts only expenses within the period's current dates.
+- Budget periods and groups belong to one user, and their names are unique per user. Neither can be deleted while a budget uses it.
 - A budget can only point to an `expense` category, and `t_transaction.type` must match its category's `type`. The services enforce both rules.
 - A transaction takes its `type` from its category. Only imported transactions can have no category, and they start in `review`.
 - Statement PDFs and their passwords are never stored.
@@ -128,4 +157,4 @@ erDiagram
 - `occurred_at` is sent and shown in Asia/Jakarta time.
 - Deleting an account also soft-deletes its transactions, including transfers from or to it.
 - Every table except `m_user` carries `user_id`. Queries must always filter by it.
-- `is_deleted` keeps accounts, account types, assets, categories, category groups, and transactions recoverable. Budgets are deleted outright.
+- `is_deleted` keeps accounts, account types, assets, categories, category groups, budget periods, budget groups, and transactions recoverable. Budgets are deleted outright.

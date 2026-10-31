@@ -28,10 +28,37 @@ export interface AssetInterface {
 
 export type AssetKind = "gold" | "investment" | "property" | "vehicle";
 
-export interface BudgetInterface {
-  categoryId: string;
-  limit: number;
+export interface BudgetGroupInterface {
+  id: string;
+  name: string;
 }
+
+export interface BudgetInputInterface {
+  categoryId: string;
+  groupId: string;
+  limit: number;
+  periodId: string;
+}
+
+export interface BudgetInterface extends BudgetInputInterface {
+  id: string;
+}
+
+export interface BudgetPeriodInputInterface {
+  /** Set only on a period that happens once. */
+  endDate: null | string;
+  intervalCount: number;
+  name: string;
+  /** Local date in YYYY-MM-DD format. Recurring periods count forward from it. */
+  startDate: string;
+  unit: BudgetPeriodUnit;
+}
+
+export interface BudgetPeriodInterface extends BudgetPeriodInputInterface {
+  id: string;
+}
+
+export type BudgetPeriodUnit = "day" | "month" | "once" | "week" | "year";
 
 export interface CategoryGroupInterface {
   categoryCount: number;
