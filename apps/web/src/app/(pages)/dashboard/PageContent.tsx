@@ -2,6 +2,7 @@
 
 import { Badge } from "@fynlo/ui/components/badge";
 import { Segmented } from "@fynlo/ui/components/segmented";
+import { Select } from "@fynlo/ui/components/select";
 import {
   ArrowDown,
   ArrowLeftRight,
@@ -30,11 +31,13 @@ import { sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import {
   accountBalance,
+  accountLabel,
   biggestIncrease,
   cashflowInRange,
   type CashflowPeriod,
   type DateRangePreset,
   resolveDateRange,
+  signedAmount,
   sortNewestFirst,
   totalBalance,
   totals,
@@ -43,8 +46,8 @@ import {
 } from "@/utils/finance";
 import {
   formatCompact,
-  formatDayShort,
   formatRupiah,
+  parseIsoDate,
   toIsoDate,
 } from "@/utils/format";
 
@@ -53,21 +56,34 @@ export default function PageContent() {
   const [period, setPeriod] = useState<CashflowPeriod>("daily");
   const [preset, setPreset] = useState<DateRangePreset>("this-month");
   const [custom, setCustom] = useState(currentMonthToDate);
+  const [chosenAccountId, setAccountId] = useState("all");
+  // The chosen account may have been deleted.
+  const account = accounts.find((a) => a.id === chosenAccountId);
+  const scoped = account
+    ? transactions.filter((t) => touchesAccount(t, account.id))
+    : transactions;
 
-  const { previous, range } = resolveDateRange(preset, custom, transactions);
+  const { previous, range } = resolveDateRange(preset, custom, scoped);
   const today = toIsoDate(new Date());
-  const inPeriod = transactionsInRange(transactions, range);
+  const inPeriod = transactionsInRange(scoped, range);
   const month = totals(inPeriod);
-  const last = previous
-    ? totals(transactionsInRange(transactions, previous))
-    : null;
-  const balance = totalBalance(accounts, transactions);
-  const series = cashflowInRange(transactions, range, period);
+  const last = previous ? totals(transactionsInRange(scoped, previous)) : null;
+  // A period that has ended shows the balance it ended with, as its statement does.
+  const asOf = preset !== "all" && range.to < today ? range.to : undefined;
+  const asOfLabel = asOf && formatFullDate(asOf);
+  const balance = account
+    ? accountBalance(account, transactions, asOf)
+    : totalBalance(accounts, transactions, asOf);
+  // Transfers don't count as income or expenses, but they do move one account's balance.
+  const balanceChange = account
+    ? inPeriod.reduce((sum, t) => sum + signedAmount(t, account.id), 0)
+    : month.net;
+  const series = cashflowInRange(scoped, range, period);
   const recent = sortNewestFirst(inPeriod).slice(0, 6);
   const periodLabel =
     DATE_RANGE_PRESETS.find((p) => p.value === preset)?.label ?? "";
   const compare = preset === "all" ? "" : compareLabel(preset);
-  const insight = biggestIncrease(categories, transactions);
+  const insight = biggestIncrease(categories, scoped);
   const peak = Math.max(...(insight?.history ?? [1]), 1);
 
   return (
@@ -79,29 +95,42 @@ export default function PageContent() {
         </div>
       </div>
 
-      <DateRangeFilter
-        custom={custom}
-        onCustomChange={setCustom}
-        onPresetChange={setPreset}
-        preset={preset}
-        range={range}
-      />
+      <div className="dashboard-filters">
+        <DateRangeFilter
+          custom={custom}
+          onCustomChange={setCustom}
+          onPresetChange={setPreset}
+          preset={preset}
+          range={range}
+        />
+        <Select
+          aria-label="Filter by account"
+          className="select-filter"
+          onChange={setAccountId}
+          options={[
+            { label: "All accounts", value: "all" },
+            ...accounts.map((a) => ({ label: accountLabel(a), value: a.id })),
+          ]}
+          value={account?.id ?? "all"}
+        />
+      </div>
 
       <div className="metric-grid">
         <MetricCard
-          // Comparing to the period's start only means something if it reaches today.
           change={
-            range.to >= today && preset !== "all"
-              ? percentChange(balance, balance - month.net)
+            preset !== "all"
+              ? percentChange(balance, balance - balanceChange)
               : null
           }
           helper={
-            range.to >= today && preset !== "all"
-              ? "vs start of period"
-              : "balance today"
+            preset === "all"
+              ? "balance today"
+              : asOfLabel
+                ? `on ${asOfLabel}, vs start of period`
+                : "vs start of period"
           }
           icon={Wallet}
-          title="Total Balance"
+          title={account ? "Account Balance" : "Total Balance"}
           tone="emerald"
           value={formatRupiah(balance)}
         />
@@ -175,6 +204,7 @@ export default function PageContent() {
           <ExpenseBreakdown
             periodLabel={periodLabel.toLowerCase()}
             range={range}
+            transactions={scoped}
           />
         </section>
       </div>
@@ -182,7 +212,11 @@ export default function PageContent() {
       <div className="section-heading">
         <div>
           <h2>Connected Accounts</h2>
-          <p>Balances based on recorded transactions.</p>
+          <p>
+            {asOfLabel
+              ? `Balances on ${asOfLabel}, based on recorded transactions.`
+              : "Balances based on recorded transactions."}
+          </p>
         </div>
         <Link className="btn secondary" href="/settings/accounts">
           <Settings aria-hidden="true" size={17} />
@@ -199,44 +233,58 @@ export default function PageContent() {
         </div>
       )}
       <div className="accounts-grid">
-        {accounts.map((account) => {
+        {(account ? [account] : accounts).map((item) => {
           const latest = sortNewestFirst(
-            transactions.filter((t) => touchesAccount(t, account.id)),
+            transactions.filter(
+              (t) => touchesAccount(t, item.id) && (!asOf || t.date <= asOf),
+            ),
           )[0];
-          const estimated = account.source === "email";
+          const estimated = latest?.source === "email";
           return (
-            <div className="account-card" key={account.id}>
+            <div className="account-card" key={item.id}>
               <div className="account-head">
-                <div
-                  className="bank-logo"
-                  style={{ background: account.color }}
-                >
-                  {account.name[0]}
+                <div className="bank-logo" style={{ background: item.color }}>
+                  {item.name[0]}
                 </div>
                 <div>
-                  <b>{account.name}</b>
-                  {account.mask && <span>•• {account.mask}</span>}
+                  <b>{item.name}</b>
+                  {item.mask && <span>•• {item.mask}</span>}
                 </div>
               </div>
               <div className="account-label">
                 {estimated ? "ESTIMATED" : "RECORDED"} BALANCE
+                {asOfLabel && ` ON ${asOfLabel.toUpperCase()}`}
               </div>
               <div className="account-balance">
-                {formatRupiah(accountBalance(account, transactions))}
+                {formatRupiah(accountBalance(item, transactions, asOf))}
               </div>
               <div className="account-foot">
                 <div>
-                  <span>Source</span>
-                  <b>{sourceLabels[account.source]}</b>
+                  <span>Latest from</span>
+                  <b>{latest ? sourceLabels[latest.source] : "-"}</b>
                 </div>
                 <div>
                   <span>Last activity</span>
-                  <b>{latest ? formatDayShort(latest.date) : "-"}</b>
+                  <b>{latest ? formatFullDate(latest.date) : "-"}</b>
                 </div>
               </div>
-              <Badge tone={estimated ? "warning" : "success"}>
+              <Badge
+                tone={
+                  estimated
+                    ? "warning"
+                    : latest?.source === "import"
+                      ? "success"
+                      : undefined
+                }
+              >
                 <span className="status-dot" />
-                {estimated ? "Based on transactions" : "Confirmed manually"}
+                {estimated
+                  ? "Not checked against a statement"
+                  : latest?.source === "import"
+                    ? "Imported from a statement"
+                    : latest
+                      ? "Entered by you"
+                      : "No activity yet"}
               </Badge>
             </div>
           );
@@ -247,7 +295,14 @@ export default function PageContent() {
         <section className="card recent-card">
           <CardHeader
             action={
-              <Link className="btn ghost" href="/transactions">
+              <Link
+                className="btn ghost"
+                href={
+                  account
+                    ? `/transactions?accountId=${account.id}`
+                    : "/transactions"
+                }
+              >
                 See All <ArrowRight aria-hidden="true" size={15} />
               </Link>
             }
@@ -259,13 +314,13 @@ export default function PageContent() {
           ) : (
             <EmptyState
               description={
-                transactions.length === 0
+                scoped.length === 0
                   ? "Your latest activity will appear here."
                   : "Try a different date range."
               }
               icon={ArrowLeftRight}
               title={
-                transactions.length === 0
+                scoped.length === 0
                   ? "No transactions yet"
                   : "No transactions in this period"
               }
@@ -301,7 +356,7 @@ export default function PageContent() {
                 ))}
               </div>
             </>
-          ) : transactions.length === 0 ? (
+          ) : scoped.length === 0 ? (
             <>
               <h3>No insights yet</h3>
               <p>Insights appear once you have recorded some transactions.</p>
@@ -326,6 +381,14 @@ function compareLabel(preset: DateRangePreset) {
     return "vs previous month";
   }
   return preset === "this-year" ? "vs last year" : "vs previous period";
+}
+
+function formatFullDate(iso: string) {
+  return parseIsoDate(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function greeting() {

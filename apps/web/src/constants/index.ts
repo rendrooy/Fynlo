@@ -24,9 +24,4 @@ export const statusLabels: Record<TransactionStatus, string> = {
 };
 
 /** A bank with pockets puts several balances in one statement. */
-export const statementBanks = [
-  { hasPockets: false, label: "BNI", value: "bni" },
-  { hasPockets: true, label: "Jago", value: "jago" },
-];
-
 export const NOT_AVAILABLE = "Not available in this prototype yet";

@@ -1,5 +1,7 @@
 "use client";
 
+import type { TransactionInterface } from "@fynlo/types";
+
 import { useFinance } from "@/providers/finance-provider";
 import { type DateRange, expenseBreakdown } from "@/utils/finance";
 import { formatCompact, formatRupiah } from "@/utils/format";
@@ -8,12 +10,19 @@ import { formatCompact, formatRupiah } from "@/utils/format";
 export function ExpenseBreakdown({
   periodLabel = "this month",
   range,
+  transactions,
 }: {
   periodLabel?: string;
   range?: DateRange;
+  /** Defaults to every transaction. */
+  transactions?: TransactionInterface[];
 }) {
-  const { categories, transactions } = useFinance();
-  const { rows, total } = expenseBreakdown(categories, transactions, range);
+  const { categories, transactions: allTransactions } = useFinance();
+  const { rows, total } = expenseBreakdown(
+    categories,
+    transactions ?? allTransactions,
+    range,
+  );
 
   let start = 0;
   const stops = rows.map((row) => {

@@ -35,7 +35,8 @@ const DATE_COLUMN_END = 60;
 const NAME_COLUMN = [100, 200];
 const DETAIL_COLUMN = [200, 295];
 const NOTE_COLUMN = [295, 430];
-const AMOUNT_COLUMN = [430, 490];
+// Amounts are right-aligned, so a long one starts further left, over the notes.
+const AMOUNT_COLUMN = [380, 490];
 const BALANCE_COLUMN_START = 490;
 const SUMMARY_LABEL_X = [310, 330];
 // A tall row vertically centers its date, so its other columns can start above it.
@@ -65,12 +66,13 @@ const toCents = (text: string) =>
 const inColumn = (x: number, [start, end]: number[]) =>
   x >= (start as number) && x < (end as number);
 
+export const isJagoStatement = (items: PdfTextItem[]) =>
+  items.some((item) => item.text === "Laporan Keuangan Bulanan") &&
+  items.some((item) => item.text === "www.jago.com");
+
 /** Parses a Jago statement, one section per pocket, and refuses it unless every balance adds up. */
 export function parseJago(items: PdfTextItem[]): ParsedStatement {
-  if (
-    !items.some((item) => item.text === "Laporan Keuangan Bulanan") ||
-    !items.some((item) => item.text === "www.jago.com")
-  ) {
+  if (!isJagoStatement(items)) {
     throw new HttpError(
       422,
       items.length === 0
@@ -101,6 +103,7 @@ export function parseJago(items: PdfTextItem[]): ParsedStatement {
   });
   if (pockets.length === 0) throw unreadable();
   const names = new Set(pockets.map((pocket) => pocket.name));
+  const moves = new Set<ParsedStatementRow>();
   const closingMarker = lines.find((line) => line.text === "INFO PENTING");
 
   const sections = pockets.map((pocket, index) => {
@@ -117,10 +120,12 @@ export function parseJago(items: PdfTextItem[]): ParsedStatement {
       ),
       pocket,
       names,
+      moves,
     );
   });
 
   checkTotalBalance(lines, sections);
+  linkPocketMoves(sections, moves);
   return { sections };
 }
 
@@ -146,6 +151,49 @@ function checkTotalBalance(lines: Line[], sections: ParsedStatementSection[]) {
   }
 }
 
+/**
+ * A move is only real when both pockets show it. Some incoming rows don't name their source,
+ * and a reversed move names a pocket that never received it.
+ */
+function linkPocketMoves(
+  sections: ParsedStatementSection[],
+  moves: Set<ParsedStatementRow>,
+) {
+  const linked = new Set<ParsedStatementRow>();
+  for (const from of sections) {
+    for (const out of from.rows) {
+      if (out.type !== "expense" || !moves.has(out)) continue;
+      for (const to of sections) {
+        if (to === from || (out.counterpart && out.counterpart !== to.name)) {
+          continue;
+        }
+        const incoming = to.rows.find(
+          (row) =>
+            row.type === "income" &&
+            moves.has(row) &&
+            !linked.has(row) &&
+            row.amount === out.amount &&
+            row.date === out.date &&
+            row.time === out.time &&
+            (row.counterpart === from.name ||
+              (!row.counterpart && out.counterpart === to.name)),
+        );
+        if (!incoming) continue;
+        out.counterpart = to.name;
+        incoming.counterpart = from.name;
+        incoming.name = from.name;
+        linked.add(out).add(incoming);
+        break;
+      }
+    }
+  }
+  for (const section of sections) {
+    for (const row of section.rows) {
+      if (!linked.has(row)) row.counterpart = null;
+    }
+  }
+}
+
 function parseDate(text: string) {
   const [, day, month, year] = text.match(DATE) ?? [];
   const monthNumber = MONTHS[(month ?? "").toLowerCase()];
@@ -157,6 +205,7 @@ function parsePocket(
   lines: Line[],
   pocket: { id: string; name: string },
   pocketNames: Set<string>,
+  moves: Set<ParsedStatementRow>,
 ): ParsedStatementSection {
   const summary = (label: string) => {
     const title = lines.find(
@@ -192,10 +241,13 @@ function parsePocket(
     const texts = (column: number[]) =>
       block.filter((line) => inColumn(line.x, column)).map((line) => line.text);
 
-    const amount = block.find(
-      (line) =>
-        inColumn(line.x, AMOUNT_COLUMN) && SIGNED_AMOUNT.test(line.text),
-    );
+    const amount = block
+      .filter(
+        (line) =>
+          inColumn(line.x, AMOUNT_COLUMN) && SIGNED_AMOUNT.test(line.text),
+      )
+      .sort((a, b) => a.x - b.x)
+      .at(-1);
     const rowBalance = block.find(
       (line) => line.x >= BALANCE_COLUMN_START && AMOUNT.test(line.text),
     );
@@ -213,13 +265,17 @@ function parsePocket(
 
     const label = texts(DETAIL_COLUMN)[0] ?? "";
     const counterparty = texts(NAME_COLUMN)[0];
-    const note = texts(NOTE_COLUMN).join(" ");
+    const note = block
+      .filter((line) => inColumn(line.x, NOTE_COLUMN) && line !== amount)
+      .map((line) => line.text)
+      .join(" ");
     const name = (counterparty || label).slice(0, MAX_ROW_NAME);
     if (!name) throw unreadable();
-    rows.push({
+    const isMove = POCKET_MOVE.test(texts(DETAIL_COLUMN).join(" "));
+    const row: ParsedStatementRow = {
       amount: Math.abs(cents) / 100,
       counterpart:
-        POCKET_MOVE.test(texts(DETAIL_COLUMN).join(" ")) &&
+        isMove &&
         counterparty &&
         pocketNames.has(counterparty) &&
         counterparty !== pocket.name
@@ -230,7 +286,9 @@ function parsePocket(
       name,
       time: `${hour}:${minute}:00`,
       type: cents > 0 ? "income" : "expense",
-    });
+    };
+    rows.push(row);
+    if (isMove) moves.add(row);
   });
 
   if (

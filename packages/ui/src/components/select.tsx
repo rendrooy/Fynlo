@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -28,9 +28,11 @@ interface SelectProps {
 }
 
 const GAP = 6;
-const MAX_MENU_HEIGHT = 280;
+const MAX_MENU_HEIGHT = 320;
+const SEARCHABLE_FROM = 5;
+const SEARCHABLE_MIN_WIDTH = 220;
 
-/** A styled dropdown with the keyboard behavior of a native select. */
+/** A styled dropdown with the keyboard behavior of a native select, searchable when long. */
 export function Select({
   "aria-label": ariaLabel,
   className = "",
@@ -41,12 +43,22 @@ export function Select({
 }: SelectProps) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLUListElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [query, setQuery] = useState("");
   const selected = options.find((option) => option.value === value);
+  const searchable = options.length >= SEARCHABLE_FROM;
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? options.filter((option) =>
+        `${option.label} ${option.group ?? ""}`.toLowerCase().includes(needle),
+      )
+    : options;
 
   function show() {
+    setQuery("");
     setActive(Math.max(options.indexOf(selected as SelectOption), 0));
     setOpen(true);
   }
@@ -57,24 +69,40 @@ export function Select({
     if (option && option.value !== value) onChange(option.value);
   }
 
-  // The top layer keeps the menu above dialogs and free of their overflow clipping.
-  useLayoutEffect(() => {
+  function place() {
     const list = menu.current;
     const button = trigger.current;
-    if (!open || !list || !button) return;
-    if (!list.matches(":popover-open")) list.showPopover();
+    if (!list || !button) return;
     const rect = button.getBoundingClientRect();
     const below = window.innerHeight - rect.bottom - GAP * 2;
     const above = rect.top - GAP * 2;
+    list.style.maxHeight = "";
     const height = Math.min(list.scrollHeight, MAX_MENU_HEIGHT);
     const flip = below < height && above > below;
-    const width = Math.min(rect.width, window.innerWidth - GAP * 2);
-    list.style.left = `${Math.min(rect.left, window.innerWidth - width - GAP)}px`;
+    const width = Math.min(
+      Math.max(rect.width, searchable ? SEARCHABLE_MIN_WIDTH : 0),
+      window.innerWidth - GAP * 2,
+    );
+    list.style.left = `${Math.max(GAP, Math.min(rect.left, window.innerWidth - width - GAP))}px`;
     list.style.maxHeight = `${Math.min(MAX_MENU_HEIGHT, flip ? above : below)}px`;
-    list.style.top = flip
-      ? `${rect.top - GAP - Math.min(height, above)}px`
-      : `${rect.bottom + GAP}px`;
+    // Anchored to the side facing the trigger, so filtering never detaches it.
+    list.style.top = flip ? "auto" : `${rect.bottom + GAP}px`;
+    list.style.bottom = flip
+      ? `${window.innerHeight - rect.top + GAP}px`
+      : "auto";
     list.style.width = `${width}px`;
+  }
+
+  // The top layer keeps the menu above dialogs and free of their overflow clipping.
+  useLayoutEffect(() => {
+    const list = menu.current;
+    if (!open || !list) return;
+    if (!list.matches(":popover-open")) list.showPopover();
+    place();
+    // On touch screens the keyboard only opens if the person taps the search.
+    if (window.matchMedia("(pointer: fine)").matches) {
+      search.current?.focus({ preventScroll: true });
+    }
   }, [open, options.length]);
 
   useEffect(() => {
@@ -87,7 +115,15 @@ export function Select({
     };
     // A fixed menu would drift away from its trigger.
     const onMove = (event: Event) => {
-      if (event.target !== menu.current) setOpen(false);
+      if (
+        event.target instanceof Node &&
+        menu.current?.contains(event.target)
+      ) {
+        return;
+      }
+      // Opening a phone's keyboard moves the page, which shouldn't end the search.
+      if (search.current && document.activeElement === search.current) place();
+      else setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("resize", onMove);
@@ -107,7 +143,10 @@ export function Select({
   }, [active, id, open]);
 
   function onKeyDown(event: KeyboardEvent) {
-    const last = options.length - 1;
+    const last = Math.max(visible.length - 1, 0);
+    // While searching, these keys belong to the text.
+    const isTyping = event.target === search.current;
+    if (isTyping && [" ", "End", "Home"].includes(event.key)) return;
     if (!open) {
       if ([" ", "ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
         event.preventDefault();
@@ -116,7 +155,12 @@ export function Select({
       return;
     }
     if (event.key === "Tab") {
-      setOpen(false);
+      if (isTyping) {
+        event.preventDefault();
+        choose();
+      } else {
+        setOpen(false);
+      }
       return;
     }
     const moves: Record<string, number> = {
@@ -131,7 +175,7 @@ export function Select({
       setActive(next);
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      choose(options[active]);
+      if (visible[active]) choose(visible[active]);
     } else if (event.key === "Escape") {
       // Escape closes only the menu, not the dialog around it.
       event.preventDefault();
@@ -164,42 +208,63 @@ export function Select({
         <ChevronDown aria-hidden="true" size={16} />
       </button>
       {open && (
-        <ul
+        <div
           className="select-menu"
-          id={`${id}-menu`}
           // Inside a label, a click would otherwise reactivate the trigger.
           onClick={(event) => event.preventDefault()}
           popover="manual"
           ref={menu}
-          role="listbox"
         >
-          {options.length === 0 && (
-            <li className="select-empty" role="presentation">
-              No options available
-            </li>
+          {searchable && (
+            <div className="select-search">
+              <Search aria-hidden="true" size={14} />
+              <input
+                aria-activedescendant={
+                  visible.length > 0 ? `${id}-${active}` : undefined
+                }
+                aria-controls={`${id}-menu`}
+                aria-label="Search options"
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setActive(0);
+                }}
+                onKeyDown={onKeyDown}
+                placeholder="Search"
+                ref={search}
+                type="search"
+                value={query}
+              />
+            </div>
           )}
-          {options.map((option, index) => (
-            <li key={option.value} role="presentation">
-              {option.group && option.group !== options[index - 1]?.group && (
-                <div className="select-group">{option.group}</div>
-              )}
-              <div
-                aria-selected={option.value === value}
-                className={`select-option ${index === active ? "active" : ""}`}
-                id={`${id}-${index}`}
-                onClick={() => choose(option)}
-                onPointerMove={() => setActive(index)}
-                role="option"
-              >
-                {option.icon}
-                <span>{option.label}</span>
-                {option.value === value && (
-                  <Check aria-hidden="true" size={15} />
+          <ul className="select-list" id={`${id}-menu`} role="listbox">
+            {visible.length === 0 && (
+              <li className="select-empty" role="presentation">
+                {needle ? "No matches" : "No options available"}
+              </li>
+            )}
+            {visible.map((option, index) => (
+              <li key={option.value} role="presentation">
+                {option.group && option.group !== visible[index - 1]?.group && (
+                  <div className="select-group">{option.group}</div>
                 )}
-              </div>
-            </li>
-          ))}
-        </ul>
+                <div
+                  aria-selected={option.value === value}
+                  className={`select-option ${index === active ? "active" : ""}`}
+                  id={`${id}-${index}`}
+                  onClick={() => choose(option)}
+                  onPointerMove={() => setActive(index)}
+                  role="option"
+                >
+                  {option.icon}
+                  <span>{option.label}</span>
+                  {option.value === value && (
+                    <Check aria-hidden="true" size={15} />
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </>
   );

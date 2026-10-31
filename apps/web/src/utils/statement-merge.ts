@@ -1,5 +1,6 @@
 import type {
   StatementPreviewInterface,
+  StatementRowInterface,
   StatementSectionInterface,
 } from "@fynlo/types";
 
@@ -24,6 +25,71 @@ const firstDate = ({ preview }: StatementFile) =>
     .sort()[0] ?? "9999-12-31";
 
 const cents = (amount: number) => Math.round(amount * 100);
+
+// A transfer between banks can land the next day, and the two clocks can differ slightly.
+const MAX_ARRIVAL_MS = 36 * 60 * 60 * 1000;
+const CLOCK_DRIFT_MS = 10 * 60 * 1000;
+
+const timeOf = (row: StatementRowInterface) =>
+  new Date(`${row.date}T${row.time}`).getTime();
+
+/**
+ * Turns money leaving one bank and arriving at another into one transfer. Only a pair with no
+ * other candidate on either side counts, since equal amounts can also be a coincidence.
+ */
+export function linkBankTransfers(sections: StatementSectionInterface[]) {
+  const rowsOfType = (type: StatementRowInterface["type"]) =>
+    sections.flatMap((section) =>
+      section.rows.flatMap((row, index) =>
+        row.type === type &&
+        !row.isDuplicate &&
+        !row.isMirror &&
+        !row.transferAccountId
+          ? [{ index, row, section }]
+          : [],
+      ),
+    );
+  const outgoing = rowsOfType("expense");
+  const incoming = rowsOfType("income");
+  type Candidate = (typeof outgoing)[number];
+  const isPair = (out: Candidate, into: Candidate) => {
+    const gap = timeOf(into.row) - timeOf(out.row);
+    return (
+      out.section.bank !== into.section.bank &&
+      cents(out.row.amount) === cents(into.row.amount) &&
+      gap >= -CLOCK_DRIFT_MS &&
+      gap <= MAX_ARRIVAL_MS
+    );
+  };
+  const changes = new Map<StatementRowInterface, StatementRowInterface>();
+  for (const out of outgoing) {
+    const matches = incoming.filter((into) => isPair(out, into));
+    const into = matches[0];
+    if (
+      !into ||
+      matches.length > 1 ||
+      outgoing.filter((other) => isPair(other, into)).length > 1
+    ) {
+      continue;
+    }
+    const pairKey = `${out.section.key}:${out.index}`;
+    changes.set(out.row, {
+      ...out.row,
+      pairKey,
+      transferAccountId: into.section.accountId,
+    });
+    changes.set(into.row, {
+      ...into.row,
+      isMirror: true,
+      pairKey,
+      transferAccountId: out.section.accountId,
+    });
+  }
+  return sections.map((section) => ({
+    ...section,
+    rows: section.rows.map((row) => changes.get(row) ?? row),
+  }));
+}
 
 /** Joins statements in date order into one preview, with one section per account or pocket. */
 export function mergeStatements(files: StatementFile[]) {

@@ -6,8 +6,9 @@ import type {
 import { pool } from "../connection/db";
 import { HttpError } from "../utils/http-error";
 import { isUuid } from "../utils/validation";
-import { parseBni } from "./statement-parsers/bni";
-import { parseJago } from "./statement-parsers/jago";
+import { loadCategoryGuesser } from "./category-guess";
+import { isBniStatement, parseBni } from "./statement-parsers/bni";
+import { isJagoStatement, parseJago } from "./statement-parsers/jago";
 import { readPdfText } from "./statement-parsers/pdf-text";
 import {
   parseAmount,
@@ -18,7 +19,10 @@ import {
 } from "./transaction-service";
 
 // Adding a bank means adding one parser here.
-const PARSERS = { bni: parseBni, jago: parseJago };
+const BANKS = [
+  { detect: isBniStatement, name: "BNI", parse: parseBni },
+  { detect: isJagoStatement, name: "Jago", parse: parseJago },
+];
 
 const MAX_ROWS = 5000;
 const TYPES = ["expense", "income"];
@@ -94,7 +98,7 @@ export async function importStatement(
   );
   const accountIds = sections.map((section) => section.accountId);
   if (new Set(accountIds).size !== accountIds.length) {
-    throw invalid("Choose a different account for each pocket");
+    throw invalid("Choose a different account for each one");
   }
   const rows = sections.flatMap((section) =>
     section.rows.map((row) => ({ ...row, accountId: section.accountId })),
@@ -193,16 +197,22 @@ export async function previewStatement(
   file?: Buffer,
 ) {
   if (!file) throw invalid("Choose a PDF file");
-  const parse = PARSERS[input.bank as keyof typeof PARSERS];
-  if (!parse || !Object.hasOwn(PARSERS, input.bank as string)) {
-    throw invalid("Choose a supported bank");
-  }
   const chosenAccounts = await parseAccountMap(userId, input.accounts);
   const password =
     typeof input.password === "string" && input.password
       ? input.password
       : undefined;
-  const statement = parse(await readPdfText(file, password));
+  const items = await readPdfText(file, password);
+  const bank = BANKS.find(({ detect }) => detect(items));
+  if (!bank) {
+    throw new HttpError(
+      422,
+      items.length === 0
+        ? "This PDF has no readable text, so it may be a scan"
+        : "Fynlo can't read statements from this bank yet",
+    );
+  }
+  const statement = bank.parse(items);
 
   const [{ rows: accounts }, { rows: owner }, { rows: categories }] =
     await Promise.all([
@@ -219,6 +229,7 @@ export async function previewStatement(
       ),
     ]);
   const ownName = owner[0]?.name.toLowerCase() ?? "";
+  const guessFromHistory = await loadCategoryGuesser(pool, userId);
 
   const accountOfPocket = new Map(
     statement.sections.flatMap((section) => {
@@ -261,6 +272,7 @@ export async function previewStatement(
       return {
         accountId,
         accountMask: section.accountMask,
+        bank: bank.name,
         canSetOpeningBalance: !earlier,
         closingBalance: section.closingBalance,
         isDifferentAccount: Boolean(
@@ -289,14 +301,21 @@ export async function previewStatement(
           const transferAccountId =
             (row.counterpart && accountOfPocket.get(row.counterpart)) || null;
           const { counterpart, ...fields } = row;
+          const isPossibleTransfer =
+            (Boolean(counterpart) && !transferAccountId) ||
+            (ownName !== "" && row.name.toLowerCase().includes(ownName));
+          // A possible transfer is the user's call, so no category is filled in for it.
+          const categoryId =
+            counterpart || isPossibleTransfer
+              ? null
+              : (guessFromHistory(row) ?? guessCategory(categories, row));
           return {
             ...fields,
-            categoryId: counterpart ? null : guessCategory(categories, row),
+            categoryId,
             isDuplicate,
             isMirror: mirrors.has(row),
-            isPossibleTransfer:
-              (Boolean(counterpart) && !transferAccountId) ||
-              (ownName !== "" && row.name.toLowerCase().includes(ownName)),
+            isPossibleTransfer,
+            isSuggested: categoryId !== null,
             transferAccountId,
           };
         }),

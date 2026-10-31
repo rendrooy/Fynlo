@@ -6,19 +6,10 @@ import { Button } from "@fynlo/ui/components/button";
 import { Select } from "@fynlo/ui/components/select";
 import { type FormEvent, useState } from "react";
 
+import { ColorPicker, COLORS } from "@/components/ColorPicker";
 import { useFinance } from "@/providers/finance-provider";
 import { ApiError } from "@/services/api";
 import { formatGrouped } from "@/utils/format";
-
-const COLORS = [
-  "#0f766e",
-  "#0284c7",
-  "#7c3aed",
-  "#db2777",
-  "#ea580c",
-  "#ca8a04",
-  "#334155",
-];
 
 export function AccountForm({
   defaultMask,
@@ -39,9 +30,7 @@ export function AccountForm({
     editing?.accountTypeId ?? accountTypes[0]?.id ?? "",
   );
   const [mask, setMask] = useState(editing?.mask ?? defaultMask ?? "");
-  const [color, setColor] = useState<string>(
-    editing?.color ?? (COLORS[0] as string),
-  );
+  const [color, setColor] = useState<string>(editing?.color ?? COLORS[0]);
   const [balance, setBalance] = useState(editing?.openingBalance ?? 0);
   const [negative, setNegative] = useState((editing?.openingBalance ?? 0) < 0);
   const [submitted, setSubmitted] = useState(false);
@@ -152,22 +141,7 @@ export function AccountForm({
         This balance is negative (for example, an overdraft)
       </label>
 
-      <fieldset className="color-field">
-        <legend>Color</legend>
-        <div>
-          {COLORS.map((option) => (
-            <button
-              aria-label={`Color ${option}`}
-              aria-pressed={color === option}
-              className={color === option ? "active" : undefined}
-              key={option}
-              onClick={() => setColor(option)}
-              style={{ background: option }}
-              type="button"
-            />
-          ))}
-        </div>
-      </fieldset>
+      <ColorPicker onChange={setColor} value={color} />
 
       {error && (
         <p className="field-error" role="alert">
