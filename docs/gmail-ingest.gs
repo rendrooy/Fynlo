@@ -4,6 +4,14 @@
 const SEARCH = "from:(noreply@jago.com OR wondr@bni.co.id) newer_than:2d";
 const SENT_FOR_SECONDS = 6 * 60 * 60;
 
+// Run this by hand after clearing transactions, then run sendBankEmails.
+function forgetSentEmails() {
+  const sent = CacheService.getScriptCache();
+  GmailApp.search(SEARCH, 0, 50).forEach((thread) => {
+    thread.getMessages().forEach((message) => sent.remove(message.getId()));
+  });
+}
+
 function sendBankEmails() {
   const properties = PropertiesService.getScriptProperties();
   const apiUrl = properties.getProperty("FYNLO_API_URL");
