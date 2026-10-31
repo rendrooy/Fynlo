@@ -5,6 +5,7 @@ import type { AssetKind } from "@fynlo/types";
 import { Badge } from "@fynlo/ui/components/badge";
 import { Button } from "@fynlo/ui/components/button";
 import {
+  ArrowRight,
   Bike,
   Building2,
   Coins,
@@ -182,6 +183,13 @@ export default function PageContent() {
                   <Link2 aria-hidden="true" size={15} />
                   {sourceLabels[account.source]}
                 </span>
+                <Link
+                  aria-label={`Transactions of ${account.name}`}
+                  className="btn ghost"
+                  href={`/transactions?accountId=${account.id}`}
+                >
+                  Details <ArrowRight aria-hidden="true" size={15} />
+                </Link>
               </div>
             </div>
           );

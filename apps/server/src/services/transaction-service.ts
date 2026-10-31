@@ -9,6 +9,7 @@ interface TransactionRow {
   date: string;
   detail: null | string;
   id: string;
+  is_not_duplicate: boolean;
   name: string;
   source: string;
   status: string;
@@ -20,12 +21,13 @@ interface TransactionRow {
 // Fynlo works in one region, so a date and time always mean Jakarta time.
 export const TIME_ZONE = "Asia/Jakarta";
 const MAX_AMOUNT = 1e15;
+const MAX_DUPLICATE_GROUP = 100;
 const STATUSES = ["review", "verified"];
 const SELECT_TRANSACTION = `
   SELECT t.id, t.account_id, t.category_id, t.type, t.amount, t.name, t.detail,
          to_char(t.occurred_at AT TIME ZONE '${TIME_ZONE}', 'YYYY-MM-DD') AS date,
          to_char(t.occurred_at AT TIME ZONE '${TIME_ZONE}', 'HH24:MI') AS time,
-         t.source, t.status, t.to_account_id
+         t.source, t.status, t.to_account_id, t.is_not_duplicate
   FROM t_transaction t`;
 const OCCURRED_AT = (parameter: string) =>
   `(${parameter}::timestamp AT TIME ZONE '${TIME_ZONE}')`;
@@ -37,6 +39,7 @@ const toTransaction = (row: TransactionRow) => ({
   date: row.date,
   detail: row.detail ?? "",
   id: row.id,
+  isNotDuplicate: row.is_not_duplicate,
   name: row.name,
   source: row.source,
   status: row.status,
@@ -105,6 +108,29 @@ export async function listTransactions(userId: string) {
     [userId],
   );
   return rows.map(toTransaction);
+}
+
+/** One request, so every copy in a group of look-alikes changes together. */
+export async function markNotDuplicate(
+  userId: string,
+  input: Record<string, unknown>,
+) {
+  const { ids } = input;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > MAX_DUPLICATE_GROUP ||
+    !ids.every(isUuid)
+  ) {
+    throw invalid("Choose the transactions to mark");
+  }
+  const { rowCount } = await pool.query(
+    `UPDATE t_transaction SET is_not_duplicate = true, updated_time = now()
+     WHERE user_id = $1 AND id = ANY($2::uuid[]) AND NOT is_deleted`,
+    [userId, ids],
+  );
+  if (rowCount !== new Set(ids).size) throw notFound();
+  return { updated: rowCount };
 }
 
 export function parseAmount(value: unknown) {
@@ -217,6 +243,12 @@ export async function updateTransaction(
   }
   if (input.detail !== undefined) assign("detail", parseDetail(input.detail));
   if (input.name !== undefined) assign("name", parseName(input.name));
+  if (input.isNotDuplicate !== undefined) {
+    if (typeof input.isNotDuplicate !== "boolean") {
+      throw invalid("Invalid duplicate flag");
+    }
+    assign("is_not_duplicate", input.isNotDuplicate);
+  }
   if (input.status !== undefined) {
     if (typeof input.status !== "string" || !STATUSES.includes(input.status)) {
       throw invalid("Status must be review or verified");

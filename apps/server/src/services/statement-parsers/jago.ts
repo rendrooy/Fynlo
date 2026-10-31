@@ -47,7 +47,8 @@ const DATE = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4})$/;
 const TIME = /^(\d{2})\.(\d{2})$/;
 const SIGNED_AMOUNT = /^[+-][\d.]+,\d{2}$/;
 const AMOUNT = /^-?[\d.]+,\d{2}$/;
-const POCKET_MOVE = /Uang Kantong/;
+// Older statements say "Pindah uang antar kantong", newer ones "Tambah/Tarik Uang Kantong".
+const POCKET_MOVE = /uang (antar )?kantong/i;
 const POCKET_ID = /^ID Kantong (\d+)$/;
 
 type Line = PdfTextItem & { position: number };
@@ -218,7 +219,7 @@ function parsePocket(
     rows.push({
       amount: Math.abs(cents) / 100,
       counterpart:
-        POCKET_MOVE.test(label) &&
+        POCKET_MOVE.test(texts(DETAIL_COLUMN).join(" ")) &&
         counterparty &&
         pocketNames.has(counterparty) &&
         counterparty !== pocket.name

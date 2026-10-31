@@ -35,8 +35,13 @@ export function TransactionDrawer({
   onEdit: (transaction: TransactionInterface) => void;
   toast: (message: string, isError?: boolean) => void;
 }) {
-  const { accounts, categories, deleteTransaction, transactions } =
-    useFinance();
+  const {
+    accounts,
+    categories,
+    deleteTransaction,
+    transactions,
+    updateTransaction,
+  } = useFinance();
   const transaction = transactions.find((t) => t.id === id);
   const account = accounts.find((a) => a.id === transaction?.accountId);
   const category = categories.find((c) => c.id === transaction?.categoryId);
@@ -119,6 +124,32 @@ export function TransactionDrawer({
               status does not mean your bank has verified it directly.
             </span>
           </div>
+          {transaction.isNotDuplicate && (
+            <div className="source-note">
+              <Info aria-hidden="true" size={18} />
+              <span>
+                You marked this as not a duplicate.{" "}
+                <button
+                  className="text-link"
+                  onClick={() => {
+                    updateTransaction(transaction.id, {
+                      isNotDuplicate: false,
+                    }).catch((error: unknown) =>
+                      toast(
+                        error instanceof ApiError
+                          ? error.message
+                          : "Please try again.",
+                        true,
+                      ),
+                    );
+                  }}
+                  type="button"
+                >
+                  Check again
+                </button>
+              </span>
+            </div>
+          )}
           <div className="drawer-actions">
             <Button
               kind="secondary"

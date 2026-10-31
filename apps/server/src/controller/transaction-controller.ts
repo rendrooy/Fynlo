@@ -4,6 +4,7 @@ import {
   createTransaction,
   deleteTransaction,
   listTransactions,
+  markNotDuplicate,
   updateTransaction,
 } from "../services/transaction-service";
 
@@ -42,6 +43,17 @@ export const updateTransactionHandler = async (
       request.params.id,
       bodyOf(request),
     ),
+    message: "OK",
+    status: 200,
+  });
+};
+
+export const markNotDuplicateHandler = async (
+  request: Request,
+  response: Response,
+) => {
+  response.status(200).json({
+    data: await markNotDuplicate(request.userId as string, bodyOf(request)),
     message: "OK",
     status: 200,
   });

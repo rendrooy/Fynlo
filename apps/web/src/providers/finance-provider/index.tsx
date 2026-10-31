@@ -57,6 +57,7 @@ import {
   listCategoriesRequest,
   listCategoryGroupsRequest,
   listTransactionsRequest,
+  markNotDuplicateRequest,
   renameAccountTypeRequest,
   renameBudgetGroupRequest,
   renameCategoryGroupRequest,
@@ -105,6 +106,7 @@ interface FinanceValue {
   loadBudgets: () => Promise<void>;
   loadCategories: () => Promise<void>;
   loadTransactions: () => Promise<void>;
+  markNotDuplicate: (ids: string[]) => Promise<void>;
   renameAccountType: (id: string, name: string) => Promise<void>;
   renameBudgetGroup: (id: string, name: string) => Promise<void>;
   renameCategoryGroup: (id: string, name: string) => Promise<void>;
@@ -129,6 +131,7 @@ interface FinanceValue {
   updateTransaction: (
     id: string,
     changes: Partial<TransactionInputInterface> & {
+      isNotDuplicate?: boolean;
       status?: TransactionStatus;
     },
   ) => Promise<void>;
@@ -359,6 +362,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     async (
       id: string,
       changes: Partial<TransactionInputInterface> & {
+        isNotDuplicate?: boolean;
         status?: TransactionStatus;
       },
     ) => {
@@ -369,6 +373,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  const markNotDuplicate = useCallback(async (ids: string[]) => {
+    await markNotDuplicateRequest(ids);
+    setTransactions((current) =>
+      current.map((t) =>
+        ids.includes(t.id) ? { ...t, isNotDuplicate: true } : t,
+      ),
+    );
+  }, []);
 
   const deleteTransaction = useCallback(async (id: string) => {
     await deleteTransactionRequest(id);
@@ -468,6 +481,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       loadBudgets,
       loadCategories,
       loadTransactions,
+      markNotDuplicate,
       renameAccountType,
       renameBudgetGroup,
       renameCategoryGroup,
@@ -514,6 +528,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       loadBudgets,
       loadCategories,
       loadTransactions,
+      markNotDuplicate,
       renameAccountType,
       renameCategoryGroup,
       transactions,
