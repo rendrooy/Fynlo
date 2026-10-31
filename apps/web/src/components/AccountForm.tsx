@@ -21,20 +21,24 @@ const COLORS = [
 ];
 
 export function AccountForm({
+  defaultMask,
+  defaultName,
   editing,
   onCancel,
   onSaved,
 }: {
+  defaultMask?: null | string;
+  defaultName?: string;
   editing?: AccountInterface;
   onCancel: () => void;
   onSaved: (message: string, created?: AccountInterface) => void;
 }) {
   const { accountTypes, createAccount, updateAccount } = useFinance();
-  const [name, setName] = useState(editing?.name ?? "");
+  const [name, setName] = useState(editing?.name ?? defaultName ?? "");
   const [accountTypeId, setAccountTypeId] = useState(
     editing?.accountTypeId ?? accountTypes[0]?.id ?? "",
   );
-  const [mask, setMask] = useState(editing?.mask ?? "");
+  const [mask, setMask] = useState(editing?.mask ?? defaultMask ?? "");
   const [color, setColor] = useState<string>(
     editing?.color ?? (COLORS[0] as string),
   );
