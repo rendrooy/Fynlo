@@ -8,6 +8,7 @@ import routes from "./routes";
 const app: express.Express = express();
 
 app.disable("x-powered-by");
+app.set("trust proxy", serverConfig.trustProxy);
 app.use(cors({ credentials: true, origin: serverConfig.corsOrigins }));
 app.use(express.json({ limit: "1mb" }));
 

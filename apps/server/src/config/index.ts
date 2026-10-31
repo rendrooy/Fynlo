@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Variables already set in the environment take priority over the file.
@@ -21,6 +21,10 @@ if (!/^[a-z_][a-z0-9_]*$/.test(schema)) {
 }
 
 export const dbConfig = {
+  // Without a CA file the connection is encrypted, but the server's identity isn't verified.
+  caCertificate: process.env.DATABASE_CA_PATH
+    ? readFileSync(process.env.DATABASE_CA_PATH, "utf8")
+    : null,
   connectionString: requireEnv("DATABASE_URL"),
   schema,
 };
@@ -29,7 +33,10 @@ export const serverConfig = {
   corsOrigins: (process.env.CORS_ORIGIN || "http://localhost:3000")
     .split(",")
     .map((origin) => origin.trim()),
+  host: process.env.HOST,
   port: Number(process.env.PORT || 4000),
+  // How many proxies stand in front of the API. Rate limits need the real client address.
+  trustProxy: Number(process.env.TRUST_PROXY || 0),
 };
 
 export const jwtConfig = {

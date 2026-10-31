@@ -25,6 +25,6 @@ const shutdown = (signal: string) => {
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 process.once("SIGINT", () => shutdown("SIGINT"));
 
-server.listen(serverConfig.port, () => {
+server.listen(serverConfig.port, serverConfig.host, () => {
   logger.info({ port: serverConfig.port }, "API server started");
 });

@@ -6,9 +6,11 @@ import { logger } from "../config/logger";
 export const pool = new Pool({
   connectionString: dbConfig.connectionString,
   // Supabase certificates are not in Node's default trust store.
-  ssl: dbConfig.connectionString.includes("supabase")
-    ? { rejectUnauthorized: false }
-    : undefined,
+  ssl: dbConfig.caCertificate
+    ? { ca: dbConfig.caCertificate, rejectUnauthorized: true }
+    : dbConfig.connectionString.includes("supabase")
+      ? { rejectUnauthorized: false }
+      : undefined,
 });
 
 pool.on("connect", (client) => {
