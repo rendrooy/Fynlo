@@ -267,13 +267,11 @@ export const updateTransactionRequest = (
 export const previewStatementRequest = (input: {
   /** Section key to account id. Empty on the first read of a pocket statement. */
   accounts: Record<string, string>;
-  bank: string;
   file: File;
   password: string;
 }) => {
   const body = new FormData();
   body.set("accounts", JSON.stringify(input.accounts));
-  body.set("bank", input.bank);
   body.set("password", input.password);
   body.set("file", input.file);
   return request<StatementPreviewInterface>("/statements/preview", {

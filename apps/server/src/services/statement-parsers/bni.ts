@@ -50,9 +50,12 @@ const toCents = (text: string) =>
 const inColumn = (x: number, [start, end]: number[]) =>
   x >= (start as number) && x < (end as number);
 
+export const isBniStatement = (items: PdfTextItem[]) =>
+  items.some((item) => item.text === "Laporan Mutasi Rekening");
+
 /** Parses a BNI statement and refuses it unless every balance adds up. */
 export function parseBni(items: PdfTextItem[]): ParsedStatement {
-  if (!items.some((item) => item.text === "Laporan Mutasi Rekening")) {
+  if (!isBniStatement(items)) {
     throw new HttpError(
       422,
       items.length === 0
@@ -131,7 +134,8 @@ export function parseBni(items: PdfTextItem[]): ParsedStatement {
       {
         accountMask: account ?? null,
         closingBalance: closing.cents / 100,
-        key: "main",
+        // Statements of two BNI accounts must stay apart when read together.
+        key: `bni-${account ?? "unknown"}`,
         name: "BNI",
         openingBalance: opening.cents / 100,
         rows,

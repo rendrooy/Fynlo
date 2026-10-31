@@ -46,14 +46,20 @@ export const previousMonth = (date = new Date()) =>
 export const touchesAccount = (t: TransactionInterface, accountId: string) =>
   t.accountId === accountId || t.toAccountId === accountId;
 
+/** The balance now, or at the end of the day given in YYYY-MM-DD format. */
 export function accountBalance(
   account: AccountInterface,
   transactions: TransactionInterface[],
+  asOf?: string,
 ) {
-  return transactions.reduce(
-    (balance, t) => balance + signedAmount(t, account.id),
-    account.openingBalance,
-  );
+  const balance = transactions
+    .filter((t) => !asOf || t.date <= asOf)
+    .reduce(
+      (sum, t) => sum + signedAmount(t, account.id),
+      account.openingBalance,
+    );
+  // Sums of decimals leave tiny remainders, and adding 0 turns -0 into 0.
+  return Math.round(balance * 100) / 100 + 0;
 }
 
 /** How much a transaction changes one account's balance. */
@@ -77,10 +83,14 @@ export function totals(transactions: TransactionInterface[]) {
 export const totalBalance = (
   accounts: AccountInterface[],
   transactions: TransactionInterface[],
+  asOf?: string,
 ) =>
   accounts
     .filter((account) => !account.isExcluded)
-    .reduce((sum, account) => sum + accountBalance(account, transactions), 0);
+    .reduce(
+      (sum, account) => sum + accountBalance(account, transactions, asOf),
+      0,
+    );
 
 export const accountLabel = (account?: AccountInterface) =>
   account ? `${account.name}${account.mask ? ` •• ${account.mask}` : ""}` : "";
@@ -324,6 +334,35 @@ export function weekdayAverages(transactions: TransactionInterface[]) {
 
 const inRange = (t: TransactionInterface, { from, to }: DateRange) =>
   t.date >= from && t.date <= to;
+
+/** Whole weeks, Monday first, covering one month, with each day's totals. */
+export function calendarDays(
+  transactions: TransactionInterface[],
+  month: Date,
+) {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  const lead = (first.getDay() + 6) % 7;
+  const count = Math.ceil((lead + last.getDate()) / 7) * 7;
+  const byDate = new Map<string, TransactionInterface[]>();
+  for (const t of transactions) {
+    byDate.set(t.date, [...(byDate.get(t.date) ?? []), t]);
+  }
+  return Array.from({ length: count }, (_, index) => {
+    const day = addDays(first, index - lead);
+    const date = toIsoDate(day);
+    const items = byDate.get(date) ?? [];
+    const { expense, income } = totals(items);
+    return {
+      count: items.length,
+      date,
+      expense,
+      income,
+      inMonth: day.getMonth() === first.getMonth(),
+      transfers: items.filter((t) => t.type === "transfer").length,
+    };
+  });
+}
 
 export const transactionsInRange = (
   transactions: TransactionInterface[],

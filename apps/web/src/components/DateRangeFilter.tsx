@@ -1,9 +1,13 @@
 "use client";
 
-import { Select } from "@fynlo/ui/components/select";
+import { CalendarDays, Check, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
-import type { DateRange, DateRangePreset } from "@/utils/finance";
-
+import {
+  type DateRange,
+  type DateRangePreset,
+  resolveDateRange,
+} from "@/utils/finance";
 import { toIsoDate } from "@/utils/format";
 
 export const DATE_RANGE_PRESETS: {
@@ -40,45 +44,117 @@ export function DateRangeFilter({
   preset: DateRangePreset;
   range: DateRange;
 }) {
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const current = DATE_RANGE_PRESETS.find((p) => p.value === preset);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  function choose(value: DateRangePreset) {
+    onPresetChange(value);
+    // A custom range still needs its dates, so the panel stays open for it.
+    if (value === "custom") return;
+    setOpen(false);
+    trigger.current?.focus();
+  }
+
   return (
-    <div className="dashboard-filter">
-      <div className="dashboard-filter-preset">
-        <Select
+    <div className="date-filter" ref={root}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label={`Date range: ${current?.label}`}
+        className={`date-filter-trigger ${open ? "open" : ""}`}
+        onClick={() => setOpen(!open)}
+        ref={trigger}
+        type="button"
+      >
+        <CalendarDays aria-hidden="true" size={16} />
+        <b>{current?.label}</b>
+        <span>{formatRange(range)}</span>
+        <ChevronDown aria-hidden="true" size={16} />
+      </button>
+      {open && (
+        <div
           aria-label="Date range"
-          onChange={(value) => onPresetChange(value as DateRangePreset)}
-          options={DATE_RANGE_PRESETS}
-          value={preset}
-        />
-      </div>
-      {preset === "custom" ? (
-        <div className="dashboard-filter-dates">
-          <input
-            aria-label="From date"
-            onChange={(event) =>
-              event.target.value &&
-              onCustomChange({ ...custom, from: event.target.value })
-            }
-            type="date"
-            value={custom.from}
-          />
-          <span>to</span>
-          <input
-            aria-label="To date"
-            onChange={(event) =>
-              event.target.value &&
-              onCustomChange({ ...custom, to: event.target.value })
-            }
-            type="date"
-            value={custom.to}
-          />
+          className="date-filter-panel"
+          role="dialog"
+        >
+          <div className="date-filter-options">
+            {DATE_RANGE_PRESETS.map((option) => (
+              <button
+                aria-pressed={option.value === preset}
+                key={option.value}
+                onClick={() => choose(option.value)}
+                type="button"
+              >
+                <b>{option.label}</b>
+                <span>{describe(option.value, custom)}</span>
+                {option.value === preset && (
+                  <Check aria-hidden="true" size={15} />
+                )}
+              </button>
+            ))}
+          </div>
+          {preset === "custom" && (
+            <div className="date-filter-custom">
+              <label>
+                From
+                <input
+                  aria-label="From date"
+                  onChange={(event) =>
+                    event.target.value &&
+                    onCustomChange({ ...custom, from: event.target.value })
+                  }
+                  type="date"
+                  value={custom.from}
+                />
+              </label>
+              <label>
+                To
+                <input
+                  aria-label="To date"
+                  onChange={(event) =>
+                    event.target.value &&
+                    onCustomChange({ ...custom, to: event.target.value })
+                  }
+                  type="date"
+                  value={custom.to}
+                />
+              </label>
+            </div>
+          )}
         </div>
-      ) : (
-        <span className="dashboard-filter-label">
-          {formatRangeDate(range.from)} – {formatRangeDate(range.to)}
-        </span>
       )}
     </div>
   );
+}
+
+function describe(preset: DateRangePreset, custom: DateRange) {
+  if (preset === "all") return "Every transaction";
+  if (preset === "custom") return "Pick your own dates";
+  return formatRange(resolveDateRange(preset, custom, []).range);
+}
+
+function formatRange({ from, to }: DateRange) {
+  return `${formatRangeDate(from)} – ${formatRangeDate(to)}`;
 }
 
 function formatRangeDate(iso: string) {

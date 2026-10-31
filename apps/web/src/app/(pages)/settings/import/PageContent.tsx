@@ -10,32 +10,57 @@ import { Badge } from "@fynlo/ui/components/badge";
 import { Button } from "@fynlo/ui/components/button";
 import { Modal } from "@fynlo/ui/components/modal";
 import { Select } from "@fynlo/ui/components/select";
-import { ArrowLeft, ChevronDown, Info, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  Info,
+  Plus,
+  Upload,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 import { AccountForm } from "@/components/AccountForm";
-import { statementBanks } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { ApiError, previewStatementRequest } from "@/services/api";
 import { categoryOptions } from "@/utils/category-options";
-import { accountLabel } from "@/utils/finance";
+import { accountBalance, accountLabel } from "@/utils/finance";
 import { formatDayShort, formatRupiah } from "@/utils/format";
-import { mergeStatements, type StatementGap } from "@/utils/statement-merge";
+import { balancesAfterImport, hasOtherSide } from "@/utils/statement-check";
+import {
+  linkBankTransfers,
+  mergeStatements,
+  type StatementGap,
+} from "@/utils/statement-merge";
 
 // Marks a dropdown value as the other side of a transfer, not a category.
 const TRANSFER = "transfer:";
 const SKIP = "skip";
-const SINGLE_SECTION = "main";
 const MAX_FILES = 12;
+const STEPS = ["Choose files", "Match accounts", "Review"];
 
 interface FileResult {
+  bank?: string;
   count?: number;
   error?: string;
+  isLocked?: boolean;
   name: string;
 }
+
+interface StatementFile {
+  name: string;
+  preview: StatementPreviewInterface;
+}
+
+const isPasswordError = (error: unknown) =>
+  error instanceof ApiError &&
+  error.status === 400 &&
+  /password/i.test(error.message);
 
 const errorText = (error: unknown) =>
   error instanceof ApiError
@@ -55,14 +80,22 @@ const rowKey = (section: StatementSectionInterface, index: number) =>
 export default function PageContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const { accounts, accountsStatus, categories, importStatement } =
-    useFinance();
+  const {
+    accounts,
+    accountsStatus,
+    categories,
+    importStatement,
+    transactions,
+  } = useFinance();
   const { toast } = useTransactionSheet();
-  const [chosenAccountId, setAccountId] = useState(
-    params.get("accountId") ?? "",
-  );
-  const [bank, setBank] = useState(statementBanks[0]?.value ?? "");
   const [files, setFiles] = useState<File[]>([]);
+  const [filePasswords, setFilePasswords] = useState<Record<string, string>>(
+    {},
+  );
+  // What the last read found, while some files still wait for a password.
+  const [readSoFar, setReadSoFar] = useState<StatementFile[]>([]);
+  const [lockedFiles, setLockedFiles] = useState<FileResult[]>([]);
+  const [leftOut, setLeftOut] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<null | {
     done: number;
     name: string;
@@ -81,6 +114,7 @@ export default function PageContent() {
   const [pocketAccounts, setPocketAccounts] = useState<Record<string, string>>(
     {},
   );
+  const [idleKeys, setIdleKeys] = useState<Set<string>>(new Set());
   const [creatingFor, setCreatingFor] =
     useState<null | StatementSectionInterface>(null);
   const [preview, setPreview] = useState<null | StatementPreviewInterface>(
@@ -92,19 +126,19 @@ export default function PageContent() {
   >({});
   const [openingKeys, setOpeningKeys] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Bank transfers found automatically that the user says aren't transfers.
+  const [unpaired, setUnpaired] = useState<Set<string>>(new Set());
 
-  const hasPockets =
-    statementBanks.find((b) => b.value === bank)?.hasPockets ?? false;
-  const accountId = chosenAccountId || (accounts[0]?.id ?? "");
   const sections = (preview?.sections ?? []).filter((s) => s.accountId);
 
   const rowsOf = (section: StatementSectionInterface) =>
     section.rows.flatMap((row, index) => {
-      if (row.isMirror) return [];
+      const isUnpaired = row.pairKey !== undefined && unpaired.has(row.pairKey);
+      if (row.isMirror && !isUnpaired) return [];
       const key = rowKey(section, index);
       const choice =
         chosenCategories[key] ??
-        (row.transferAccountId
+        (row.transferAccountId && !isUnpaired
           ? `${TRANSFER}${row.transferAccountId}`
           : row.categoryId);
       const isTransfer = choice?.startsWith(TRANSFER) ?? false;
@@ -120,6 +154,29 @@ export default function PageContent() {
         },
       ];
     });
+  /** The money arrives through the other pocket's row, so it follows that row's choices. */
+  const isMirrorIncluded = (
+    section: StatementSectionInterface,
+    mirror: StatementSectionInterface["rows"][number],
+  ) => {
+    const source = sections.find(
+      (s) => s.accountId === mirror.transferAccountId,
+    );
+    return (
+      source !== undefined &&
+      rowsOf(source).some(
+        (row) =>
+          row.type === "expense" &&
+          row.transferAccountId === section.accountId &&
+          (mirror.pairKey
+            ? row.pairKey === mirror.pairKey
+            : row.amount === mirror.amount &&
+              row.date === mirror.date &&
+              row.time === mirror.time) &&
+          !excluded.has(row.key),
+      )
+    );
+  };
   const allRows = sections.flatMap(rowsOf);
   const selected = allRows.filter((row) => !excluded.has(row.key));
   const income = selected
@@ -128,16 +185,18 @@ export default function PageContent() {
   const expense = selected
     .filter((row) => row.type === "expense" && !row.transferAccountId)
     .reduce((sum, row) => sum + row.amount, 0);
+  const balances = balancesAfterImport(sections, rowsOf, excluded, gaps);
+  const offBalances = balances.filter((balance) => balance.difference !== 0);
   const mappedIds = Object.values(pocketAccounts).filter((id) => id !== SKIP);
   const hasRepeatedAccount = new Set(mappedIds).size !== mappedIds.length;
 
   /** Sends one file at a time, for real progress and to keep the server's memory low. */
   async function readFiles(chosen: Record<string, string>) {
     const results: FileResult[] = [];
-    const statements: { name: string; preview: StatementPreviewInterface }[] =
-      [];
+    const statements: StatementFile[] = [];
     const hashes = new Map<string, string>();
     for (const [index, file] of files.entries()) {
+      if (leftOut.has(file.name)) continue;
       setProgress({ done: index, name: file.name, total: files.length });
       const hash = await fileHash(file);
       const original = hashes.get(hash);
@@ -152,12 +211,12 @@ export default function PageContent() {
       try {
         const result = await previewStatementRequest({
           accounts: chosen,
-          bank,
           file,
-          password,
+          password: filePasswords[file.name] || password,
         });
         statements.push({ name: file.name, preview: result });
         results.push({
+          bank: result.sections[0]?.bank,
           count: result.sections.reduce(
             (sum, section) => sum + section.rows.length,
             0,
@@ -165,7 +224,11 @@ export default function PageContent() {
           name: file.name,
         });
       } catch (caught) {
-        results.push({ error: errorText(caught), name: file.name });
+        results.push({
+          error: errorText(caught),
+          isLocked: isPasswordError(caught),
+          name: file.name,
+        });
       }
     }
     setProgress(null);
@@ -183,8 +246,11 @@ export default function PageContent() {
       return;
     }
     const merged = mergeStatements(statements);
-    const chosenSections = merged.preview.sections.filter((s) => s.accountId);
-    setPreview(merged.preview);
+    const chosenSections = linkBankTransfers(
+      merged.preview.sections.filter((s) => s.accountId),
+    );
+    setUnpaired(new Set());
+    setPreview({ sections: chosenSections });
     setGaps(merged.gaps);
     setMismatchedKeys(merged.mismatchedKeys);
     setExcluded(
@@ -210,27 +276,59 @@ export default function PageContent() {
     event.preventDefault();
     setSubmitted(true);
     if (files.length === 0 || files.length > MAX_FILES) return;
-    if (!hasPockets) {
-      if (accountId) await loadPreview({ [SINGLE_SECTION]: accountId });
-      return;
-    }
     setError("");
     setBusy(true);
     const { results, statements } = await readFiles({});
     setBusy(false);
+    const locked = results.filter((result) => result.isLocked);
+    setLockedFiles(locked);
+    setReadSoFar(statements);
+    if (locked.length > 0) return;
     if (statements.length === 0) {
       setError(results[0]?.error ?? "No statement could be read");
       return;
     }
+    chooseAccounts(statements);
+  }
+
+  function chooseAccounts(statements: StatementFile[]) {
     const active = mergeStatements(statements).preview.sections.filter(
       (s) => s.rows.length > 0,
     );
+    const linkedAccountId = params.get("accountId");
+    // An excluded account with no money, before or after, has nothing worth keeping.
+    const idle = active.filter((section) => {
+      const account = accounts.find((a) => a.id === section.suggestedAccountId);
+      return (
+        account?.isExcluded &&
+        accountBalance(account, transactions) === 0 &&
+        section.openingBalance === 0 &&
+        section.closingBalance === 0
+      );
+    });
+    setIdleKeys(new Set(idle.map((section) => section.key)));
     setPockets(active);
     setPocketAccounts(
       Object.fromEntries(
-        active.map((s) => [s.key, s.suggestedAccountId ?? SKIP]),
+        active.map((s) => [
+          s.key,
+          idle.includes(s)
+            ? SKIP
+            : (s.suggestedAccountId ??
+              // Opened from a new account, which has no number to match yet.
+              (active.length === 1 && linkedAccountId
+                ? linkedAccountId
+                : SKIP)),
+        ]),
       ),
     );
+  }
+
+  function continueWithoutLocked() {
+    setLeftOut(new Set(lockedFiles.map((file) => file.name)));
+    setLockedFiles([]);
+    setFileResults((current) => current.filter((result) => !result.isLocked));
+    chooseAccounts(readSoFar);
   }
 
   async function save() {
@@ -280,6 +378,15 @@ export default function PageContent() {
     setCollapsed(next);
   }
 
+  function showSection(key: string) {
+    const next = new Set(collapsed);
+    next.delete(key);
+    setCollapsed(next);
+    document
+      .getElementById(`import-section-${key}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function toggleOpening(key: string) {
     const next = new Set(openingKeys);
     if (next.has(key)) next.delete(key);
@@ -287,15 +394,19 @@ export default function PageContent() {
     setOpeningKeys(next);
   }
 
+  const failedFiles = fileResults.filter((result) => result.error).length;
   const fileList = fileResults.length > 1 && (
-    <div className="card manage-list import-files">
+    <details className="card import-files" open={failedFiles > 0}>
+      <summary>
+        {fileResults.length - failedFiles} of {fileResults.length} files read
+      </summary>
       {fileResults.map((result) => (
         <div className="manage-row" key={result.name}>
           <div className="manage-copy">
             <b>{result.name}</b>
             <span>
               {result.error ??
-                `${result.count} ${result.count === 1 ? "transaction" : "transactions"}`}
+                `${result.bank}, ${result.count} ${result.count === 1 ? "transaction" : "transactions"}`}
             </span>
           </div>
           <Badge tone={result.error ? "warning" : "success"}>
@@ -303,7 +414,7 @@ export default function PageContent() {
           </Badge>
         </div>
       ))}
-    </div>
+    </details>
   );
 
   const progressBar = progress && (
@@ -336,48 +447,55 @@ export default function PageContent() {
       <div className="page-intro">
         <div>
           <h1>Import Statement</h1>
-          <p>Add past transactions from a bank statement PDF.</p>
+          <p>Add past transactions from bank statement PDFs.</p>
         </div>
       </div>
 
+      <ol className="import-steps">
+        {STEPS.map((step, index) => {
+          const current = preview ? 2 : pockets ? 1 : 0;
+          return (
+            <li
+              aria-current={index === current ? "step" : undefined}
+              className={index < current ? "done" : undefined}
+              key={step}
+            >
+              <i>
+                {index < current ? (
+                  <Check aria-hidden="true" size={13} strokeWidth={3} />
+                ) : (
+                  index + 1
+                )}
+              </i>
+              <span>{step}</span>
+            </li>
+          );
+        })}
+      </ol>
+
       {!pockets && !preview && (
         <form className="card import-form" noValidate onSubmit={read}>
-          <div className="form-grid">
-            <label>
-              Bank
-              <Select
-                onChange={setBank}
-                options={statementBanks}
-                value={bank}
-              />
-            </label>
-            {!hasPockets && (
-              <label>
-                Account
-                <Select
-                  onChange={setAccountId}
-                  options={accounts.map((a) => ({
-                    label: accountLabel(a),
-                    value: a.id,
-                  }))}
-                  placeholder="Add an account first"
-                  value={accountId}
-                />
-                {submitted && !accountId && (
-                  <span className="field-error">Add an account first</span>
-                )}
-              </label>
-            )}
-          </div>
-          <label>
-            Statement PDFs
+          <label className={`import-drop ${files.length > 0 ? "filled" : ""}`}>
+            <Upload aria-hidden="true" size={22} />
+            <b>
+              {files.length > 0
+                ? `${files.length} ${files.length === 1 ? "file" : "files"} chosen`
+                : "Choose or drop statement PDFs"}
+            </b>
+            <span>
+              Files from different banks can go together. Fynlo reads the bank
+              from each file.
+            </span>
             <input
               accept="application/pdf,.pdf"
-              className="file-input"
+              aria-label="Statement PDFs"
               multiple
-              onChange={(event) =>
-                setFiles(Array.from(event.target.files ?? []))
-              }
+              onChange={(event) => {
+                setFiles(Array.from(event.target.files ?? []));
+                setLockedFiles([]);
+                setLeftOut(new Set());
+                setFilePasswords({});
+              }}
               type="file"
             />
             {submitted && files.length === 0 && (
@@ -389,8 +507,15 @@ export default function PageContent() {
               </span>
             )}
           </label>
+          {files.length > 0 && (
+            <ul className="import-chosen">
+              {files.map((file) => (
+                <li key={file.name}>{file.name}</li>
+              ))}
+            </ul>
+          )}
           <label>
-            PDF password (if locked, the same for all files)
+            PDF password (only if locked)
             <input
               autoComplete="off"
               onChange={(event) => setPassword(event.target.value)}
@@ -402,6 +527,29 @@ export default function PageContent() {
             Files and the password are used only to read these statements.
             Neither is saved.
           </p>
+          {lockedFiles.length > 0 && (
+            <div className="import-locked">
+              <b>Enter the password for these files</b>
+              {lockedFiles.map((file) => (
+                <label key={file.name}>
+                  <span>{file.name}</span>
+                  <input
+                    aria-label={`Password for ${file.name}`}
+                    autoComplete="off"
+                    onChange={(event) =>
+                      setFilePasswords((current) => ({
+                        ...current,
+                        [file.name]: event.target.value,
+                      }))
+                    }
+                    type="password"
+                    value={filePasswords[file.name] ?? ""}
+                  />
+                  <small>{file.error}</small>
+                </label>
+              ))}
+            </div>
+          )}
           {progressBar}
           {error && (
             <p className="field-error" role="alert">
@@ -409,6 +557,15 @@ export default function PageContent() {
             </p>
           )}
           <div className="modal-actions">
+            {lockedFiles.length > 0 && readSoFar.length > 0 && (
+              <Button
+                disabled={busy}
+                kind="secondary"
+                onClick={continueWithoutLocked}
+              >
+                Continue Without Them
+              </Button>
+            )}
             <Button
               disabled={busy || accountsStatus === "loading"}
               type="submit"
@@ -424,8 +581,8 @@ export default function PageContent() {
           {fileList}
           <div className="section-heading">
             <div>
-              <h2>Choose an account for each pocket</h2>
-              <p>Moves between chosen pockets are saved as one transfer.</p>
+              <h2>Choose an account for each balance</h2>
+              <p>Moves between chosen accounts are saved as one transfer.</p>
             </div>
           </div>
           <div className="card">
@@ -439,10 +596,16 @@ export default function PageContent() {
                 <div className="manage-copy">
                   <b>{pocket.name}</b>
                   <span>
+                    {pocket.bank}
+                    {pocket.accountMask && ` •• ${pocket.accountMask}`} ·{" "}
                     {pocket.rows.length}{" "}
                     {pocket.rows.length === 1 ? "transaction" : "transactions"}
                   </span>
                 </div>
+                {idleKeys.has(pocket.key) &&
+                  pocketAccounts[pocket.key] === SKIP && (
+                    <Badge>Skipped: excluded, no balance</Badge>
+                  )}
                 <div className="import-map-select">
                   <Select
                     aria-label={`Account for ${pocket.name}`}
@@ -453,7 +616,7 @@ export default function PageContent() {
                       }))
                     }
                     options={[
-                      { label: "Skip this pocket", value: SKIP },
+                      { label: "Skip this one", value: SKIP },
                       ...accounts.map((a) => ({
                         label: accountLabel(a),
                         value: a.id,
@@ -472,7 +635,7 @@ export default function PageContent() {
           {progressBar}
           {hasRepeatedAccount && (
             <p className="field-error" role="alert">
-              Choose a different account for each pocket
+              Choose a different account for each one
             </p>
           )}
           {error && (
@@ -523,6 +686,46 @@ export default function PageContent() {
               </div>
             </div>
           ))}
+          <div
+            className={`import-check ${offBalances.length > 0 ? "off" : "ok"}`}
+            role="status"
+          >
+            {offBalances.length > 0 ? (
+              <CircleAlert aria-hidden="true" size={20} />
+            ) : (
+              <Check aria-hidden="true" size={20} />
+            )}
+            <div>
+              <b>
+                {offBalances.length > 0
+                  ? `${offBalances.length} ${offBalances.length === 1 ? "balance doesn't" : "balances don't"} match the statement`
+                  : "Every balance matches the statement"}
+              </b>
+              {offBalances.length > 0 ? (
+                <ul>
+                  {offBalances.map((balance) => {
+                    const section = sections.find((x) => x.key === balance.key);
+                    return (
+                      <li key={balance.key}>
+                        <button
+                          className="text-link"
+                          onClick={() => showSection(balance.key)}
+                          type="button"
+                        >
+                          {accountLabel(
+                            accountById(section?.accountId ?? null),
+                          )}
+                        </button>{" "}
+                        is off by {formatRupiah(Math.abs(balance.difference))}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <span>Importing these choices gives the same balances.</span>
+              )}
+            </div>
+          </div>
           <div className="card import-summary">
             <div>
               <span>Selected</span>
@@ -549,11 +752,18 @@ export default function PageContent() {
             const others = accounts.filter((a) => a.id !== section.accountId);
             const rows = rowsOf(section);
             const isCollapsed = collapsed.has(section.key);
+            const { after, difference } = balances.find(
+              (balance) => balance.key === section.key,
+            ) as (typeof balances)[number];
             const chosenCount = rows.filter(
               (row) => !excluded.has(row.key),
             ).length;
             return (
-              <section className="import-section" key={section.key}>
+              <section
+                className="import-section"
+                id={`import-section-${section.key}`}
+                key={section.key}
+              >
                 <button
                   aria-expanded={!isCollapsed}
                   className="import-section-toggle"
@@ -563,10 +773,17 @@ export default function PageContent() {
                   <span>
                     <b>{accountLabel(account)}</b>
                     <small>
-                      Statement closing balance{" "}
-                      {formatRupiah(section.closingBalance)}
+                      Statement {formatRupiah(section.closingBalance)} · After
+                      import {formatRupiah(after)}
                     </small>
                   </span>
+                  {difference === 0 ? (
+                    <Badge tone="success">Matches</Badge>
+                  ) : (
+                    <Badge tone="danger">
+                      Off by {formatRupiah(Math.abs(difference))}
+                    </Badge>
+                  )}
                   <Badge>
                     {chosenCount} of {rows.length} selected
                   </Badge>
@@ -611,71 +828,122 @@ export default function PageContent() {
                     </label>
                   )}
                   <div className="card manage-list">
-                    {rows.length === 0 && (
+                    {section.rows.length === 0 && (
                       <div className="empty">
-                        <span>
-                          Every transaction here is a transfer shown under the
-                          other account.
-                        </span>
+                        <span>No transactions in this statement.</span>
                       </div>
                     )}
-                    {rows.map((row) => (
-                      <div className="manage-row import-row" key={row.key}>
-                        <input
-                          aria-label={`Import ${row.name}`}
-                          checked={!excluded.has(row.key)}
-                          onChange={() => toggle(row.key)}
-                          type="checkbox"
-                        />
-                        <div className="manage-copy">
-                          <b>{row.name}</b>
-                          <span>
-                            {formatDayShort(row.date)}, {row.time.slice(0, 5)}
-                            {row.detail && ` · ${row.detail}`}
-                          </span>
-                        </div>
-                        {row.isDuplicate && (
-                          <Badge tone="warning">Possible duplicate</Badge>
-                        )}
-                        {row.isPossibleTransfer &&
-                          !row.transferAccountId &&
-                          !chosenCategories[row.key] &&
-                          others.length > 0 && <Badge>Possible transfer</Badge>}
-                        <div className="import-category">
-                          <Select
-                            aria-label={`Category for ${row.name}`}
-                            onChange={(value) =>
-                              setChosenCategories((current) => ({
-                                ...current,
-                                [row.key]: value,
-                              }))
+                    {section.rows.map((statementRow, index) => {
+                      const row = rows.find(
+                        (item) => item.key === rowKey(section, index),
+                      );
+                      if (!row) {
+                        return (
+                          <MirrorRow
+                            amount={statementRow.amount}
+                            date={statementRow.date}
+                            detail={statementRow.detail}
+                            from={accountLabel(
+                              accountById(statementRow.transferAccountId),
+                            )}
+                            isIncluded={isMirrorIncluded(section, statementRow)}
+                            key={rowKey(section, index)}
+                            name={statementRow.name}
+                            onNotTransfer={
+                              statementRow.pairKey
+                                ? () =>
+                                    setUnpaired(
+                                      new Set(unpaired).add(
+                                        statementRow.pairKey as string,
+                                      ),
+                                    )
+                                : undefined
                             }
-                            options={[
-                              ...categoryOptions(
-                                categories.filter((c) => c.type === row.type),
-                              ),
-                              ...others.map((a) => ({
-                                group:
-                                  row.type === "income"
-                                    ? "Transfer from"
-                                    : "Transfer to",
-                                label: accountLabel(a),
-                                value: `${TRANSFER}${a.id}`,
-                              })),
-                            ]}
-                            placeholder="Uncategorized"
-                            value={row.choice ?? ""}
+                            time={statementRow.time}
                           />
-                        </div>
-                        <strong
-                          className={row.type === "income" ? "positive" : ""}
-                        >
-                          {formatRupiah(
-                            row.type === "income" ? row.amount : -row.amount,
+                        );
+                      }
+                      return (
+                        <div className="manage-row import-row" key={row.key}>
+                          <input
+                            aria-label={`Import ${row.name}`}
+                            checked={!excluded.has(row.key)}
+                            onChange={() => toggle(row.key)}
+                            type="checkbox"
+                          />
+                          <div className="manage-copy">
+                            <b>{row.name}</b>
+                            <span>
+                              {formatDayShort(row.date)}, {row.time.slice(0, 5)}
+                              {row.detail && ` · ${row.detail}`}
+                            </span>
+                          </div>
+                          {row.isDuplicate && (
+                            <Badge tone="warning">Possible duplicate</Badge>
                           )}
-                        </strong>
-                      </div>
-                    ))}
+                          {!excluded.has(row.key) &&
+                            (() => {
+                              const other = sections.find(
+                                (s) => s.accountId === row.transferAccountId,
+                              );
+                              return (
+                                other &&
+                                !hasOtherSide(row, other) && (
+                                  <Badge tone="danger">
+                                    Not on{" "}
+                                    {accountLabel(accountById(other.accountId))}
+                                    &apos;s statement
+                                  </Badge>
+                                )
+                              );
+                            })()}
+                          {row.isSuggested &&
+                            row.categoryId &&
+                            !chosenCategories[row.key] && (
+                              <Badge tone="info">Suggested</Badge>
+                            )}
+                          {row.isPossibleTransfer &&
+                            !row.transferAccountId &&
+                            !chosenCategories[row.key] &&
+                            others.length > 0 && (
+                              <Badge>Possible transfer</Badge>
+                            )}
+                          <div className="import-category">
+                            <Select
+                              aria-label={`Category for ${row.name}`}
+                              onChange={(value) =>
+                                setChosenCategories((current) => ({
+                                  ...current,
+                                  [row.key]: value,
+                                }))
+                              }
+                              options={[
+                                ...categoryOptions(
+                                  categories.filter((c) => c.type === row.type),
+                                ),
+                                ...others.map((a) => ({
+                                  group:
+                                    row.type === "income"
+                                      ? "Transfer from"
+                                      : "Transfer to",
+                                  label: accountLabel(a),
+                                  value: `${TRANSFER}${a.id}`,
+                                })),
+                              ]}
+                              placeholder="Uncategorized"
+                              value={row.choice ?? ""}
+                            />
+                          </div>
+                          <strong
+                            className={row.type === "income" ? "positive" : ""}
+                          >
+                            {formatRupiah(
+                              row.type === "income" ? row.amount : -row.amount,
+                            )}
+                          </strong>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </section>
@@ -687,7 +955,12 @@ export default function PageContent() {
               {error}
             </p>
           )}
-          <div className="modal-actions">
+          <div className="import-actions">
+            <span className={offBalances.length > 0 ? "off" : undefined}>
+              {offBalances.length > 0
+                ? "Some balances won't match"
+                : "Balances match"}
+            </span>
             <Button
               kind="secondary"
               onClick={() => {
@@ -731,6 +1004,54 @@ export default function PageContent() {
           />
         )}
       </Modal>
+    </div>
+  );
+}
+
+/** A pocket's incoming move, shown to match the statement but saved as the other pocket's transfer. */
+function MirrorRow({
+  amount,
+  date,
+  detail,
+  from,
+  isIncluded,
+  name,
+  onNotTransfer,
+  time,
+}: {
+  amount: number;
+  date: string;
+  detail: string;
+  from: string;
+  isIncluded: boolean;
+  name: string;
+  /** Offered when Fynlo paired the two sides itself, which can be a coincidence. */
+  onNotTransfer?: () => void;
+  time: string;
+}) {
+  return (
+    <div
+      className={`manage-row import-row import-mirror ${isIncluded ? "" : "skipped"}`}
+    >
+      <ArrowLeftRight aria-hidden="true" size={15} />
+      <div className="manage-copy">
+        <b>{name}</b>
+        <span>
+          {formatDayShort(date)}, {time.slice(0, 5)}
+          {detail && ` · ${detail}`}
+        </span>
+      </div>
+      <span className="import-mirror-note">
+        {isIncluded
+          ? `Included in the transfer from ${from}`
+          : `Not imported, the transfer from ${from} is off`}
+      </span>
+      {onNotTransfer && (
+        <Button kind="ghost" onClick={onNotTransfer}>
+          Not a transfer
+        </Button>
+      )}
+      <strong className="positive">{formatRupiah(amount)}</strong>
     </div>
   );
 }

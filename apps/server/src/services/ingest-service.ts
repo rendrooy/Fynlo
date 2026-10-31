@@ -5,6 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { pool } from "../connection/db";
 import { HttpError } from "../utils/http-error";
 import { isUuid } from "../utils/validation";
+import { loadCategoryGuesser } from "./category-guess";
 import {
   htmlToLines,
   type ParsedBankMessage,
@@ -396,17 +397,15 @@ async function recordMessage(
     [userId],
   );
   const name = message.counterpartyName;
+  const guessFromHistory = await loadCategoryGuesser(client, userId);
+  const row = { detail: message.detail, name, type: message.type };
   const transactionId = await createTransaction(client, userId, {
     accountId: account.id,
     amount: message.amount,
     at,
     categoryId: toAccountId
       ? null
-      : guessCategory(categories, {
-          detail: message.detail,
-          name,
-          type: message.type,
-        }),
+      : (guessFromHistory(row) ?? guessCategory(categories, row)),
     detail: message.detail,
     name,
     reference: message.reference,

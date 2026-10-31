@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   Bell,
   Calendar,
+  CalendarDays,
   ChartColumn,
   ChevronRight,
   CircleCheck,
@@ -41,6 +42,7 @@ const nav: NavItem[] = [
   { href: "/transactions", icon: ArrowLeftRight, label: "Transactions" },
   { href: "/accounts", icon: Wallet, label: "Accounts" },
   { href: "/analytics", icon: ChartColumn, label: "Analytics" },
+  { href: "/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/budgets", icon: Target, label: "Budgets" },
   { href: "/weekly-review", icon: CircleCheck, label: "Weekly Review" },
   { href: "/settings", icon: Settings, label: "Settings" },
@@ -93,7 +95,9 @@ function AppShell({ children }: { children: ReactNode }) {
   const pending = transactions.filter((t) => t.status === "review").length;
   const dark = theme === "dark";
   const showAdd =
-    pathname.startsWith("/dashboard") || pathname.startsWith("/transactions");
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/transactions") ||
+    pathname.startsWith("/calendar");
 
   return (
     <div className="app">

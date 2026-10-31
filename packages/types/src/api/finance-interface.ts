@@ -111,7 +111,7 @@ export interface StatementImportInterface {
     openingBalance: null | number;
     rows: Omit<
       StatementRowInterface,
-      "isDuplicate" | "isMirror" | "isPossibleTransfer"
+      "isDuplicate" | "isMirror" | "isPossibleTransfer" | "isSuggested" | "pairKey"
     >[];
   }[];
 }
@@ -130,7 +130,11 @@ export interface StatementRowInterface {
   isMirror: boolean;
   /** A move to an account that isn't chosen, or the description carries the owner's own name. */
   isPossibleTransfer: boolean;
+  /** The category was guessed, from past choices or a known keyword. */
+  isSuggested: boolean;
   name: string;
+  /** Shared by the two sides of a transfer between banks, found across the statements. */
+  pairKey?: string;
   /** Time in HH:mm:ss format. */
   time: string;
   /** The other account, when this row is a transfer between own accounts. */
@@ -144,6 +148,8 @@ export interface StatementSectionInterface {
   /** Null until an account is chosen for this section. */
   accountId: null | string;
   accountMask: null | string;
+  /** The bank that issued the statement, read from the file. */
+  bank: string;
   /** True when no saved transaction is older than this statement. */
   canSetOpeningBalance: boolean;
   closingBalance: number;
