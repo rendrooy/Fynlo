@@ -103,9 +103,10 @@ export default function PageContent() {
           value: "WIB",
         },
         {
-          description: "Send transactions from your iPhone",
+          action: () => router.push("/settings/automation"),
+          description: "Record transactions from bank emails",
           icon: Link2,
-          title: "iOS Shortcuts automation",
+          title: "Automation",
         },
         {
           description: "Set review reminders and transaction updates",

@@ -11,6 +11,9 @@ erDiagram
     m_category_group ||--o{ m_category : groups
     m_user ||--o{ m_budget : sets
     m_user ||--o{ t_transaction : records
+    m_user ||--o{ m_ingest_token : issues
+    m_user ||--o{ t_ingest_event : receives
+    t_transaction |o--o{ t_ingest_event : "is backed by"
     m_account ||--o{ t_transaction : "holds"
     m_account |o--o{ t_transaction : "receives transfers"
     m_category ||--o{ t_transaction : "classifies"
@@ -99,6 +102,32 @@ erDiagram
         timestamptz updated_time
     }
 
+    m_ingest_token {
+        uuid id PK
+        uuid user_id FK
+        varchar name
+        varchar token_hash UK
+        timestamptz last_used_time
+        boolean is_revoked
+        timestamptz created_time
+    }
+
+    t_ingest_event {
+        uuid id PK
+        uuid user_id FK
+        varchar source "email, notification"
+        varchar external_id
+        varchar sender
+        varchar subject
+        text body
+        timestamptz received_at
+        varchar status
+        varchar reason
+        uuid transaction_id FK
+        timestamptz created_time
+        timestamptz updated_time
+    }
+
     m_budget_period {
         uuid id PK
         uuid user_id FK
@@ -134,6 +163,7 @@ erDiagram
         timestamptz occurred_at
         varchar source "email, import, manual, shortcut"
         varchar status "review, verified"
+        varchar reference "unique per user"
         boolean is_deleted
         timestamptz created_time
         timestamptz updated_time
@@ -153,6 +183,9 @@ erDiagram
 - A budget can only point to an `expense` category, and `t_transaction.type` must match its category's `type`. The services enforce both rules.
 - A transaction takes its `type` from its category. Only imported transactions can have no category, and they start in `review`.
 - Statement PDFs and their passwords are never stored.
+- A device token is stored only as a SHA-256 hash, and can only send messages.
+- An ingest event is unique per user, source, and message id, so a message sent twice is processed once. It keeps the message body so it can be read again after a parser or account is added.
+- A message joins a transaction with the same account, direction, and amount within 10 minutes, unless another message already backs that transaction. Two or more candidates create a new transaction marked for checking.
 - `occurred_at` keeps seconds for imported transactions, which is how a repeated import is recognized.
 - `occurred_at` is sent and shown in Asia/Jakarta time.
 - Deleting an account also soft-deletes its transactions, including transfers from or to it.

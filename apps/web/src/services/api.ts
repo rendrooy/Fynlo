@@ -12,6 +12,9 @@ import type {
   CategoryInputInterface,
   CategoryInterface,
   CategoryType,
+  IngestEventInterface,
+  IngestEventStatus,
+  IngestTokenInterface,
   LoginResponseInterface,
   StatementImportInterface,
   StatementPreviewInterface,
@@ -219,6 +222,26 @@ export const renameBudgetGroupRequest = (id: string, name: string) =>
 
 export const deleteBudgetGroupRequest = (id: string) =>
   request<undefined>(`/budget-groups/${id}`, { method: "DELETE" });
+
+export const listIngestTokensRequest = () =>
+  request<IngestTokenInterface[]>("/ingest-tokens");
+
+export const createIngestTokenRequest = (name: string) =>
+  request<IngestTokenInterface & { token: string }>("/ingest-tokens", {
+    body: JSON.stringify({ name }),
+    method: "POST",
+  });
+
+export const revokeIngestTokenRequest = (id: string) =>
+  request<undefined>(`/ingest-tokens/${id}`, { method: "DELETE" });
+
+export const listIngestEventsRequest = () =>
+  request<IngestEventInterface[]>("/ingest/events");
+
+export const retryIngestEventRequest = (id: string) =>
+  request<{ status: IngestEventStatus }>(`/ingest/events/${id}/retry`, {
+    method: "POST",
+  });
 
 export const listTransactionsRequest = () =>
   request<TransactionInterface[]>("/transactions");

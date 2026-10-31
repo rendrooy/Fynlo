@@ -51,6 +51,21 @@ interface ExistingTransaction {
   type: string;
 }
 
+export function guessCategory(
+  categories: { id: string; name: string; type: string }[],
+  row: { detail: string; name: string; type: string },
+) {
+  if (row.type !== "expense") return null;
+  const text = `${row.name} ${row.detail}`.toLowerCase();
+  const rule = KEYWORDS.find(({ words }) =>
+    words.some((word) => new RegExp(`\\b${word}\\b`).test(text)),
+  );
+  return (
+    categories.find((c) => c.type === row.type && c.name === rule?.category)
+      ?.id ?? null
+  );
+}
+
 export async function importStatement(
   userId: string,
   input: Record<string, unknown>,
@@ -321,21 +336,6 @@ function findMirrors(
     }
   }
   return mirrors;
-}
-
-function guessCategory(
-  categories: { id: string; name: string; type: string }[],
-  row: { detail: string; name: string; type: string },
-) {
-  if (row.type !== "expense") return null;
-  const text = `${row.name} ${row.detail}`.toLowerCase();
-  const rule = KEYWORDS.find(({ words }) =>
-    words.some((word) => new RegExp(`\\b${word}\\b`).test(text)),
-  );
-  return (
-    categories.find((c) => c.type === row.type && c.name === rule?.category)
-      ?.id ?? null
-  );
 }
 
 async function loadAccountHistory(

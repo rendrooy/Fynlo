@@ -32,6 +32,15 @@ import {
 } from "../controller/category-group-controller";
 import { liveHealth, readyHealth } from "../controller/health-controller";
 import {
+  createIngestTokenHandler,
+  ingestAuthMiddleware,
+  ingestHandler,
+  listIngestEventsHandler,
+  listIngestTokensHandler,
+  retryIngestEventHandler,
+  revokeIngestTokenHandler,
+} from "../controller/ingest-controller";
+import {
   importStatementHandler,
   previewStatementHandler,
   statementUpload,
@@ -43,7 +52,10 @@ import {
   updateTransactionHandler,
 } from "../controller/transaction-controller";
 import { authMiddleware } from "../middleware/auth.middleware";
-import { loginRateLimit } from "../middleware/rate-limit.middleware";
+import {
+  ingestRateLimit,
+  loginRateLimit,
+} from "../middleware/rate-limit.middleware";
 
 const router = Router();
 
@@ -80,6 +92,17 @@ router.get("/categories", authMiddleware, listCategoriesHandler);
 router.post("/categories", authMiddleware, createCategoryHandler);
 router.patch("/categories/:id", authMiddleware, updateCategoryHandler);
 router.delete("/categories/:id", authMiddleware, deleteCategoryHandler);
+
+router.post("/ingest", ingestRateLimit, ingestAuthMiddleware, ingestHandler);
+router.get("/ingest/events", authMiddleware, listIngestEventsHandler);
+router.post(
+  "/ingest/events/:id/retry",
+  authMiddleware,
+  retryIngestEventHandler,
+);
+router.get("/ingest-tokens", authMiddleware, listIngestTokensHandler);
+router.post("/ingest-tokens", authMiddleware, createIngestTokenHandler);
+router.delete("/ingest-tokens/:id", authMiddleware, revokeIngestTokenHandler);
 
 router.get("/budgets", authMiddleware, budgetHandlers.list);
 router.post("/budgets", authMiddleware, budgetHandlers.create);

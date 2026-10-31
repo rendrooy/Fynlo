@@ -84,6 +84,27 @@ export interface CategoryInterface extends CategoryInputInterface {
 
 export type CategoryType = "expense" | "income";
 
+export interface IngestEventInterface {
+  id: string;
+  reason: null | string;
+  receivedAt: string;
+  sender: null | string;
+  source: "email" | "notification";
+  status: IngestEventStatus;
+  subject: null | string;
+  transactionId: null | string;
+}
+
+export type IngestEventStatus =
+  "ambiguous" | "created" | "failed" | "ignored" | "merged" | "unmatched";
+
+export interface IngestTokenInterface {
+  createdTime: string;
+  id: string;
+  lastUsedTime: null | string;
+  name: string;
+}
+
 export interface StatementImportInterface {
   sections: {
     accountId: string;
