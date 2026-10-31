@@ -2,6 +2,8 @@ import { createInterface } from "node:readline";
 
 import { pool } from "../connection/db";
 import { DEFAULT_ACCOUNT_TYPES } from "../services/account-type-service";
+import { DEFAULT_BUDGET_GROUPS } from "../services/budget-group-service";
+import { DEFAULT_BUDGET_PERIODS } from "../services/budget-period-service";
 import {
   DEFAULT_CATEGORIES,
   DEFAULT_CATEGORY_GROUPS,
@@ -81,6 +83,18 @@ async function main() {
        SELECT new_user.id, type_name
        FROM new_user CROSS JOIN unnest($5::text[]) AS type_name
      ),
+     new_budget_groups AS (
+       INSERT INTO m_budget_group (user_id, name)
+       SELECT new_user.id, group_name
+       FROM new_user CROSS JOIN unnest($8::text[]) AS group_name
+     ),
+     new_budget_periods AS (
+       INSERT INTO m_budget_period (user_id, name, unit, start_date)
+       SELECT new_user.id, p.name, p.unit, p."startDate"::date
+       FROM new_user
+       CROSS JOIN jsonb_to_recordset($9::jsonb)
+         AS p (name text, unit text, "startDate" text)
+     ),
      new_groups AS (
        INSERT INTO m_category_group (user_id, name, type)
        SELECT new_user.id, g.name, g.type
@@ -102,6 +116,8 @@ async function main() {
       DEFAULT_ACCOUNT_TYPES,
       JSON.stringify(DEFAULT_CATEGORY_GROUPS),
       JSON.stringify(DEFAULT_CATEGORIES),
+      DEFAULT_BUDGET_GROUPS,
+      JSON.stringify(DEFAULT_BUDGET_PERIODS),
     ],
   );
   if (!rowCount) throw new Error(`User already exists: ${email}`);

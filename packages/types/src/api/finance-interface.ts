@@ -28,10 +28,37 @@ export interface AssetInterface {
 
 export type AssetKind = "gold" | "investment" | "property" | "vehicle";
 
-export interface BudgetInterface {
-  categoryId: string;
-  limit: number;
+export interface BudgetGroupInterface {
+  id: string;
+  name: string;
 }
+
+export interface BudgetInputInterface {
+  categoryId: string;
+  groupId: string;
+  limit: number;
+  periodId: string;
+}
+
+export interface BudgetInterface extends BudgetInputInterface {
+  id: string;
+}
+
+export interface BudgetPeriodInputInterface {
+  /** Set only on a period that happens once. */
+  endDate: null | string;
+  intervalCount: number;
+  name: string;
+  /** Local date in YYYY-MM-DD format. Recurring periods count forward from it. */
+  startDate: string;
+  unit: BudgetPeriodUnit;
+}
+
+export interface BudgetPeriodInterface extends BudgetPeriodInputInterface {
+  id: string;
+}
+
+export type BudgetPeriodUnit = "day" | "month" | "once" | "week" | "year";
 
 export interface CategoryGroupInterface {
   categoryCount: number;
@@ -57,23 +84,40 @@ export interface CategoryInterface extends CategoryInputInterface {
 
 export type CategoryType = "expense" | "income";
 
+export interface IngestEventInterface {
+  id: string;
+  reason: null | string;
+  receivedAt: string;
+  sender: null | string;
+  source: "email" | "notification";
+  status: IngestEventStatus;
+  subject: null | string;
+  transactionId: null | string;
+}
+
+export type IngestEventStatus =
+  "ambiguous" | "created" | "failed" | "ignored" | "merged" | "unmatched";
+
+export interface IngestTokenInterface {
+  createdTime: string;
+  id: string;
+  lastUsedTime: null | string;
+  name: string;
+}
+
 export interface StatementImportInterface {
-  accountId: string;
-  openingBalance: null | number;
-  rows: (Omit<StatementRowInterface, "isDuplicate" | "isPossibleTransfer"> & {
-    /** The other account, when this row is a transfer between own accounts. */
-    transferAccountId: null | string;
-  })[];
+  sections: {
+    accountId: string;
+    openingBalance: null | number;
+    rows: Omit<
+      StatementRowInterface,
+      "isDuplicate" | "isMirror" | "isPossibleTransfer"
+    >[];
+  }[];
 }
 
 export interface StatementPreviewInterface {
-  accountMask: null | string;
-  /** True when no saved transaction is older than this statement. */
-  canSetOpeningBalance: boolean;
-  closingBalance: number;
-  isDifferentAccount: boolean;
-  openingBalance: number;
-  rows: StatementRowInterface[];
+  sections: StatementSectionInterface[];
 }
 
 export interface StatementRowInterface {
@@ -82,13 +126,33 @@ export interface StatementRowInterface {
   date: string;
   detail: string;
   isDuplicate: boolean;
-  /** The description carries the owner's own name. */
+  /** The incoming side of a move between two chosen pockets, already covered by the outgoing side. */
+  isMirror: boolean;
+  /** A move to an account that isn't chosen, or the description carries the owner's own name. */
   isPossibleTransfer: boolean;
   name: string;
   /** Time in HH:mm:ss format. */
   time: string;
+  /** The other account, when this row is a transfer between own accounts. */
+  transferAccountId: null | string;
   /** The direction of the money in this statement's account. */
   type: CategoryType;
+}
+
+/** One balance within a statement: the whole account, or one pocket of it. */
+export interface StatementSectionInterface {
+  /** Null until an account is chosen for this section. */
+  accountId: null | string;
+  accountMask: null | string;
+  /** True when no saved transaction is older than this statement. */
+  canSetOpeningBalance: boolean;
+  closingBalance: number;
+  isDifferentAccount: boolean;
+  key: string;
+  name: string;
+  openingBalance: number;
+  rows: StatementRowInterface[];
+  suggestedAccountId: null | string;
 }
 
 export interface TransactionInputInterface {

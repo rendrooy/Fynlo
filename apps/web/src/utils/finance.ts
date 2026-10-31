@@ -1,6 +1,7 @@
 import type {
   AccountInterface,
   BudgetInterface,
+  BudgetPeriodInterface,
   CategoryInterface,
   TransactionInterface,
 } from "@fynlo/types";
@@ -9,10 +10,30 @@ import {
   formatDayShort,
   formatMonthShort,
   monthKey,
+  parseIsoDate,
   toIsoDate,
 } from "./format";
 
+const DAY_MS = 86400000;
+
+const addDays = (date: Date, days: number) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+
 export type CashflowPeriod = "daily" | "monthly" | "weekly";
+
+/** Keeps the day of the month, using the last day when a month is too short. */
+function addMonths(date: Date, months: number) {
+  const lastDay = new Date(
+    date.getFullYear(),
+    date.getMonth() + months + 1,
+    0,
+  ).getDate();
+  return new Date(
+    date.getFullYear(),
+    date.getMonth() + months,
+    Math.min(date.getDate(), lastDay),
+  );
+}
 
 export const inMonth = (transactions: TransactionInterface[], month: Date) => {
   const key = monthKey(month);
@@ -101,12 +122,15 @@ export function biggestIncrease(
   };
 }
 
+/** Limits and spending of budgets, counting only expenses dated within the range. */
 export function budgetSummary(
   budgets: BudgetInterface[],
   transactions: TransactionInterface[],
-  month = new Date(),
+  range: { from: string; to: string },
 ) {
-  const spentMap = spentByCategory(inMonth(transactions, month));
+  const spentMap = spentByCategory(
+    transactions.filter((t) => t.date >= range.from && t.date <= range.to),
+  );
   const limit = budgets.reduce((sum, budget) => sum + budget.limit, 0);
   const spent = budgets.reduce(
     (sum, budget) => sum + (spentMap.get(budget.categoryId) ?? 0),
@@ -187,6 +211,42 @@ export function lastMonths(count: number, from = new Date()) {
     (_, i) =>
       new Date(from.getFullYear(), from.getMonth() - (count - 1 - i), 1),
   );
+}
+
+/** The dates of a budget period that contain `today`, or its first dates if it hasn't started. */
+export function periodRange(
+  period: Pick<
+    BudgetPeriodInterface,
+    "endDate" | "intervalCount" | "startDate" | "unit"
+  >,
+  today = new Date(),
+) {
+  const { endDate, intervalCount, startDate, unit } = period;
+  if (unit === "once") return { from: startDate, to: endDate ?? startDate };
+
+  const start = parseIsoDate(startDate);
+  const current = parseIsoDate(toIsoDate(today));
+  if (unit === "day" || unit === "week") {
+    const length = intervalCount * (unit === "week" ? 7 : 1);
+    const elapsed = Math.round((current.getTime() - start.getTime()) / DAY_MS);
+    const offset = Math.max(Math.floor(elapsed / length), 0) * length;
+    return {
+      from: toIsoDate(addDays(start, offset)),
+      to: toIsoDate(addDays(start, offset + length - 1)),
+    };
+  }
+
+  const months = intervalCount * (unit === "year" ? 12 : 1);
+  const elapsed =
+    (current.getFullYear() - start.getFullYear()) * 12 +
+    current.getMonth() -
+    start.getMonth();
+  let index = Math.max(Math.floor(elapsed / months), 0);
+  if (index > 0 && addMonths(start, index * months) > current) index -= 1;
+  return {
+    from: toIsoDate(addMonths(start, index * months)),
+    to: toIsoDate(addDays(addMonths(start, (index + 1) * months), -1)),
+  };
 }
 
 export function spentByCategory(transactions: TransactionInterface[]) {

@@ -1,7 +1,13 @@
+import type {
+  ParsedStatementRow,
+  ParsedStatementSection,
+} from "./statement-parsers/types";
+
 import { pool } from "../connection/db";
 import { HttpError } from "../utils/http-error";
 import { isUuid } from "../utils/validation";
 import { parseBni } from "./statement-parsers/bni";
+import { parseJago } from "./statement-parsers/jago";
 import { readPdfText } from "./statement-parsers/pdf-text";
 import {
   parseAmount,
@@ -12,7 +18,7 @@ import {
 } from "./transaction-service";
 
 // Adding a bank means adding one parser here.
-const PARSERS = { bni: parseBni };
+const PARSERS = { bni: parseBni, jago: parseJago };
 
 const MAX_ROWS = 5000;
 const TYPES = ["expense", "income"];
@@ -36,36 +42,69 @@ const KEYWORDS: { category: string; words: string[] }[] = [
 
 const invalid = (message: string) => new HttpError(400, message);
 
+interface ExistingTransaction {
+  amount: string;
+  at: string;
+  day: string;
+  is_transfer: boolean;
+  source: string;
+  type: string;
+}
+
+export function guessCategory(
+  categories: { id: string; name: string; type: string }[],
+  row: { detail: string; name: string; type: string },
+) {
+  if (row.type !== "expense") return null;
+  const text = `${row.name} ${row.detail}`.toLowerCase();
+  const rule = KEYWORDS.find(({ words }) =>
+    words.some((word) => new RegExp(`\\b${word}\\b`).test(text)),
+  );
+  return (
+    categories.find((c) => c.type === row.type && c.name === rule?.category)
+      ?.id ?? null
+  );
+}
+
 export async function importStatement(
   userId: string,
   input: Record<string, unknown>,
 ) {
-  const accountId = await parseOwnedAccount(userId, input.accountId);
-  if (!Array.isArray(input.rows) || input.rows.length === 0) {
+  if (!Array.isArray(input.sections) || input.sections.length === 0) {
     throw invalid("Choose at least one transaction to import");
   }
-  if (input.rows.length > MAX_ROWS) {
+  const sections = await Promise.all(
+    input.sections.map(async (section: Record<string, unknown>) => {
+      const opening = section.openingBalance ?? null;
+      if (
+        opening !== null &&
+        (typeof opening !== "number" || !Number.isFinite(opening))
+      ) {
+        throw invalid("Opening balance must be a valid amount");
+      }
+      if (!Array.isArray(section.rows)) {
+        throw invalid("Choose at least one transaction to import");
+      }
+      return {
+        accountId: await parseOwnedAccount(userId, section.accountId),
+        opening: opening as null | number,
+        rows: section.rows.map(parseImportRow),
+      };
+    }),
+  );
+  const accountIds = sections.map((section) => section.accountId);
+  if (new Set(accountIds).size !== accountIds.length) {
+    throw invalid("Choose a different account for each pocket");
+  }
+  const rows = sections.flatMap((section) =>
+    section.rows.map((row) => ({ ...row, accountId: section.accountId })),
+  );
+  if (rows.length === 0) {
+    throw invalid("Choose at least one transaction to import");
+  }
+  if (rows.length > MAX_ROWS) {
     throw invalid(`A statement can have at most ${MAX_ROWS} transactions`);
   }
-  const rows = input.rows.map((row: Record<string, unknown>) => {
-    if (typeof row.type !== "string" || !TYPES.includes(row.type)) {
-      throw invalid("Type must be expense or income");
-    }
-    if (row.transferAccountId && row.categoryId) {
-      throw invalid("A transfer can't have a category");
-    }
-    return {
-      amount: parseAmount(row.amount),
-      categoryId: row.categoryId ? String(row.categoryId) : null,
-      detail: parseDetail(row.detail),
-      name: parseName(row.name),
-      occurredAt: parseOccurredAt(row.date, row.time),
-      transferAccountId: row.transferAccountId
-        ? String(row.transferAccountId)
-        : null,
-      type: row.type,
-    };
-  });
 
   // A category must belong to this user and match the row's direction.
   const chosen = [...new Set(rows.flatMap((r) => r.categoryId ?? []))];
@@ -80,10 +119,13 @@ export async function importStatement(
     if (row.categoryId && typeOf.get(row.categoryId) !== row.type) {
       throw invalid("Choose a valid category");
     }
+    if (row.transferAccountId === row.accountId) {
+      throw invalid("Choose a different account for the transfer");
+    }
   }
 
   const targets = [...new Set(rows.flatMap((r) => r.transferAccountId ?? []))];
-  if (!targets.every(isUuid) || targets.includes(accountId)) {
+  if (!targets.every(isUuid)) {
     throw invalid("Choose a different account for the transfer");
   }
   const { rowCount: ownedTargets } = await pool.query(
@@ -93,14 +135,6 @@ export async function importStatement(
   );
   if (ownedTargets !== targets.length) {
     throw invalid("Choose a different account for the transfer");
-  }
-
-  const opening = input.openingBalance ?? null;
-  if (
-    opening !== null &&
-    (typeof opening !== "number" || !Number.isFinite(opening))
-  ) {
-    throw invalid("Opening balance must be a valid amount");
   }
 
   // All or nothing, so a failed import never leaves half a statement behind.
@@ -113,19 +147,19 @@ export async function importStatement(
           detail, occurred_at, source, status)
        SELECT $1,
               -- Money coming in was sent from the other account, and vice versa.
-              CASE WHEN r.target IS NOT NULL AND r.type = 'income' THEN r.target ELSE $2::uuid END,
+              CASE WHEN r.target IS NOT NULL AND r.type = 'income' THEN r.target ELSE r.account END,
               CASE WHEN r.target IS NULL THEN NULL
-                   WHEN r.type = 'income' THEN $2::uuid ELSE r.target END,
+                   WHEN r.type = 'income' THEN r.account ELSE r.target END,
               r.category_id,
               CASE WHEN r.target IS NULL THEN r.type ELSE 'transfer' END,
               r.amount, r.name, r.detail,
               r.occurred_at::timestamp AT TIME ZONE '${TIME_ZONE}', 'import',
               CASE WHEN r.category_id IS NULL AND r.target IS NULL THEN 'review' ELSE 'verified' END
-       FROM unnest($3::uuid[], $4::text[], $5::numeric[], $6::text[], $7::text[], $8::text[], $9::uuid[])
-         AS r (category_id, type, amount, name, detail, occurred_at, target)`,
+       FROM unnest($2::uuid[], $3::uuid[], $4::text[], $5::numeric[], $6::text[], $7::text[], $8::text[], $9::uuid[])
+         AS r (account, category_id, type, amount, name, detail, occurred_at, target)`,
       [
         userId,
-        accountId,
+        rows.map((r) => r.accountId),
         rows.map((r) => r.categoryId),
         rows.map((r) => r.type),
         rows.map((r) => r.amount),
@@ -135,11 +169,12 @@ export async function importStatement(
         rows.map((r) => r.transferAccountId),
       ],
     );
-    if (opening !== null) {
+    for (const section of sections) {
+      if (section.opening === null) continue;
       await client.query(
         `UPDATE m_account SET opening_balance = $3, updated_time = now()
          WHERE user_id = $1 AND id = $2`,
-        [userId, accountId, opening],
+        [userId, section.accountId, section.opening],
       );
     }
     await client.query("COMMIT");
@@ -158,35 +193,158 @@ export async function previewStatement(
   file?: Buffer,
 ) {
   if (!file) throw invalid("Choose a PDF file");
-  const accountId = await parseOwnedAccount(userId, input.accountId);
   const parse = PARSERS[input.bank as keyof typeof PARSERS];
   if (!parse || !Object.hasOwn(PARSERS, input.bank as string)) {
     throw invalid("Choose a supported bank");
   }
+  const chosenAccounts = await parseAccountMap(userId, input.accounts);
   const password =
     typeof input.password === "string" && input.password
       ? input.password
       : undefined;
   const statement = parse(await readPdfText(file, password));
 
-  const { rows: accounts } = await pool.query<{ mask: null | string }>(
-    "SELECT mask FROM m_account WHERE user_id = $1 AND id = $2",
-    [userId, accountId],
-  );
-  const mask = accounts[0]?.mask;
-  // Banks list by posting order, which can differ slightly from the transaction time.
-  const dates = statement.rows.map((row) => row.date).sort();
-  const firstDate = dates[0];
-  const lastDate = dates.at(-1);
+  const [{ rows: accounts }, { rows: owner }, { rows: categories }] =
+    await Promise.all([
+      pool.query<{ id: string; mask: null | string; name: string }>(
+        "SELECT id, mask, name FROM m_account WHERE user_id = $1 AND NOT is_deleted ORDER BY created_time",
+        [userId],
+      ),
+      pool.query<{ name: string }>("SELECT name FROM m_user WHERE id = $1", [
+        userId,
+      ]),
+      pool.query<{ id: string; name: string; type: string }>(
+        "SELECT id, name, type FROM m_category WHERE user_id = $1 AND NOT is_deleted",
+        [userId],
+      ),
+    ]);
+  const ownName = owner[0]?.name.toLowerCase() ?? "";
 
-  const { rows: existing } = await pool.query<{
-    amount: string;
-    at: string;
-    day: string;
-    is_transfer: boolean;
-    source: string;
-    type: string;
-  }>(
+  const accountOfPocket = new Map(
+    statement.sections.flatMap((section) => {
+      const accountId = chosenAccounts[section.key];
+      return accountId ? [[section.name, accountId] as const] : [];
+    }),
+  );
+  const mirrors = findMirrors(statement.sections, accountOfPocket);
+  const taken = new Set(Object.values(chosenAccounts));
+
+  const sections = await Promise.all(
+    statement.sections.map(async (section) => {
+      const accountId = chosenAccounts[section.key] ?? null;
+      const account = accounts.find((a) => a.id === accountId);
+      // Banks list by posting order, which can differ slightly from the transaction time.
+      const dates = section.rows.map((row) => row.date).sort();
+      const firstDate = dates[0] ?? "1970-01-01";
+      const lastDate = dates.at(-1) ?? "1970-01-01";
+      const { earlier, existing } = accountId
+        ? await loadAccountHistory(userId, accountId, firstDate, lastDate)
+        : { earlier: false, existing: [] };
+
+      // Each saved transaction can cover only one row, so real look-alikes stay selected.
+      const unmatched = [...existing];
+      const takeMatch = (matches: (item: ExistingTransaction) => boolean) => {
+        const index = unmatched.findIndex(matches);
+        if (index < 0) return false;
+        unmatched.splice(index, 1);
+        return true;
+      };
+
+      const suggestion = accounts.find(
+        (a) =>
+          !taken.has(a.id) &&
+          ((section.accountMask && a.mask === section.accountMask) ||
+            a.name.toLowerCase() === section.name.toLowerCase()),
+      );
+      if (!accountId && suggestion) taken.add(suggestion.id);
+
+      return {
+        accountId,
+        accountMask: section.accountMask,
+        canSetOpeningBalance: !earlier,
+        closingBalance: section.closingBalance,
+        isDifferentAccount: Boolean(
+          account?.mask &&
+          section.accountMask &&
+          account.mask !== section.accountMask,
+        ),
+        key: section.key,
+        name: section.name,
+        openingBalance: section.openingBalance,
+        rows: section.rows.map((row) => {
+          const same = (item: ExistingTransaction) =>
+            Number(item.amount) === row.amount && item.type === row.type;
+          const isDuplicate =
+            takeMatch(
+              (item) => same(item) && item.at === `${row.date} ${row.time}`,
+            ) ||
+            // Manual entries and the other side of a transfer have a different
+            // time or none, so the day has to be enough.
+            takeMatch(
+              (item) =>
+                same(item) &&
+                (item.source !== "import" || item.is_transfer) &&
+                item.day === row.date,
+            );
+          const transferAccountId =
+            (row.counterpart && accountOfPocket.get(row.counterpart)) || null;
+          const { counterpart, ...fields } = row;
+          return {
+            ...fields,
+            categoryId: counterpart ? null : guessCategory(categories, row),
+            isDuplicate,
+            isMirror: mirrors.has(row),
+            isPossibleTransfer:
+              (Boolean(counterpart) && !transferAccountId) ||
+              (ownName !== "" && row.name.toLowerCase().includes(ownName)),
+            transferAccountId,
+          };
+        }),
+        suggestedAccountId: accountId ?? suggestion?.id ?? null,
+      };
+    }),
+  );
+  return { sections };
+}
+
+/** A move between two chosen pockets appears in both. The incoming side is the one to hide. */
+function findMirrors(
+  sections: ParsedStatementSection[],
+  accountOfPocket: Map<string, string>,
+) {
+  const mirrors = new Set<ParsedStatementRow>();
+  const used = new Set<ParsedStatementRow>();
+  for (const section of sections) {
+    if (!accountOfPocket.has(section.name)) continue;
+    for (const row of section.rows) {
+      if (row.type !== "income" || !row.counterpart) continue;
+      if (!accountOfPocket.has(row.counterpart)) continue;
+      const source = sections
+        .find((other) => other.name === row.counterpart)
+        ?.rows.find(
+          (other) =>
+            !used.has(other) &&
+            other.type === "expense" &&
+            other.counterpart === section.name &&
+            other.amount === row.amount &&
+            other.date === row.date &&
+            other.time === row.time,
+        );
+      if (!source) continue;
+      used.add(source);
+      mirrors.add(row);
+    }
+  }
+  return mirrors;
+}
+
+async function loadAccountHistory(
+  userId: string,
+  accountId: string,
+  firstDate: string,
+  lastDate: string,
+) {
+  const { rows: existing } = await pool.query<ExistingTransaction>(
     // A transfer counts as money out of its source and into its destination.
     `SELECT amount, source, type = 'transfer' AS is_transfer,
             CASE WHEN type <> 'transfer' THEN type
@@ -196,87 +354,59 @@ export async function previewStatement(
      FROM t_transaction
      WHERE user_id = $1 AND (account_id = $2 OR to_account_id = $2) AND NOT is_deleted
        AND (occurred_at AT TIME ZONE '${TIME_ZONE}')::date BETWEEN $3::date AND $4::date`,
-    [userId, accountId, firstDate ?? "1970-01-01", lastDate ?? "1970-01-01"],
+    [userId, accountId, firstDate, lastDate],
   );
-  const { rowCount: earlier } = await pool.query(
+  const { rowCount } = await pool.query(
     `SELECT 1 FROM t_transaction
      WHERE user_id = $1 AND (account_id = $2 OR to_account_id = $2) AND NOT is_deleted
        AND (occurred_at AT TIME ZONE '${TIME_ZONE}')::date < $3::date
      LIMIT 1`,
-    [userId, accountId, firstDate ?? "1970-01-01"],
+    [userId, accountId, firstDate],
   );
-
-  const { rows: categories } = await pool.query<{
-    id: string;
-    name: string;
-    type: string;
-  }>(
-    "SELECT id, name, type FROM m_category WHERE user_id = $1 AND NOT is_deleted",
-    [userId],
-  );
-
-  const { rows: owner } = await pool.query<{ name: string }>(
-    "SELECT name FROM m_user WHERE id = $1",
-    [userId],
-  );
-  const ownName = owner[0]?.name.toLowerCase() ?? "";
-
-  // Each saved transaction can cover only one row, so real look-alikes stay selected.
-  const unmatched = [...existing];
-  const takeMatch = (matches: (item: (typeof existing)[number]) => boolean) => {
-    const index = unmatched.findIndex(matches);
-    if (index < 0) return false;
-    unmatched.splice(index, 1);
-    return true;
-  };
-
-  return {
-    accountMask: statement.accountMask,
-    canSetOpeningBalance: !earlier,
-    closingBalance: statement.closingBalance,
-    isDifferentAccount: Boolean(
-      mask && statement.accountMask && mask !== statement.accountMask,
-    ),
-    openingBalance: statement.openingBalance,
-    rows: statement.rows.map((row) => {
-      const same = (item: (typeof existing)[number]) =>
-        Number(item.amount) === row.amount && item.type === row.type;
-      const isDuplicate =
-        takeMatch(
-          (item) => same(item) && item.at === `${row.date} ${row.time}`,
-        ) ||
-        // Manual entries and the other side of a transfer have a different
-        // time or none, so the day has to be enough.
-        takeMatch(
-          (item) =>
-            same(item) &&
-            (item.source !== "import" || item.is_transfer) &&
-            item.day === row.date,
-        );
-      return {
-        ...row,
-        categoryId: guessCategory(categories, row),
-        isDuplicate,
-        isPossibleTransfer:
-          ownName !== "" && row.name.toLowerCase().includes(ownName),
-      };
-    }),
-  };
+  return { earlier: Boolean(rowCount), existing };
 }
 
-function guessCategory(
-  categories: { id: string; name: string; type: string }[],
-  row: { detail: string; name: string; type: string },
-) {
-  if (row.type !== "expense") return null;
-  const text = `${row.name} ${row.detail}`.toLowerCase();
-  const rule = KEYWORDS.find(({ words }) =>
-    words.some((word) => new RegExp(`\\b${word}\\b`).test(text)),
-  );
-  return (
-    categories.find((c) => c.type === row.type && c.name === rule?.category)
-      ?.id ?? null
-  );
+/** Sent as text because the statement arrives as a file upload. */
+async function parseAccountMap(userId: string, value: unknown) {
+  if (value === undefined || value === "") return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(value));
+  } catch {
+    throw invalid("Choose a valid account");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw invalid("Choose a valid account");
+  }
+  const map: Record<string, string> = {};
+  for (const [key, accountId] of Object.entries(parsed)) {
+    map[key] = await parseOwnedAccount(userId, accountId);
+  }
+  const ids = Object.values(map);
+  if (new Set(ids).size !== ids.length) {
+    throw invalid("Choose a different account for each pocket");
+  }
+  return map;
+}
+
+function parseImportRow(row: Record<string, unknown>) {
+  if (typeof row.type !== "string" || !TYPES.includes(row.type)) {
+    throw invalid("Type must be expense or income");
+  }
+  if (row.transferAccountId && row.categoryId) {
+    throw invalid("A transfer can't have a category");
+  }
+  return {
+    amount: parseAmount(row.amount),
+    categoryId: row.categoryId ? String(row.categoryId) : null,
+    detail: parseDetail(row.detail),
+    name: parseName(row.name),
+    occurredAt: parseOccurredAt(row.date, row.time),
+    transferAccountId: row.transferAccountId
+      ? String(row.transferAccountId)
+      : null,
+    type: row.type,
+  };
 }
 
 async function parseOwnedAccount(userId: string, value: unknown) {

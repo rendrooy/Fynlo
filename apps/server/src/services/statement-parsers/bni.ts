@@ -110,6 +110,7 @@ export function parseBni(items: PdfTextItem[]): ParsedStatement {
       .trim();
     rows.push({
       amount: Math.abs(cents) / 100,
+      counterpart: null,
       date: parseDate(start.text),
       detail: description ? label : "",
       name: description || label,
@@ -126,10 +127,16 @@ export function parseBni(items: PdfTextItem[]): ParsedStatement {
     .find((line) => /^[A-Z ]+ - \d{4,}$/.test(line.text))
     ?.text.match(/(\d{4})$/)?.[1];
   return {
-    accountMask: account ?? null,
-    closingBalance: closing.cents / 100,
-    openingBalance: opening.cents / 100,
-    rows,
+    sections: [
+      {
+        accountMask: account ?? null,
+        closingBalance: closing.cents / 100,
+        key: "main",
+        name: "BNI",
+        openingBalance: opening.cents / 100,
+        rows,
+      },
+    ],
   };
 }
 

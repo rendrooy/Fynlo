@@ -3,10 +3,18 @@ import type {
   AccountInterface,
   AccountTypeInterface,
   AuthUserInterface,
+  BudgetGroupInterface,
+  BudgetInputInterface,
+  BudgetInterface,
+  BudgetPeriodInputInterface,
+  BudgetPeriodInterface,
   CategoryGroupInterface,
   CategoryInputInterface,
   CategoryInterface,
   CategoryType,
+  IngestEventInterface,
+  IngestEventStatus,
+  IngestTokenInterface,
   LoginResponseInterface,
   StatementImportInterface,
   StatementPreviewInterface,
@@ -156,6 +164,85 @@ export const updateCategoryRequest = (
 export const deleteCategoryRequest = (id: string) =>
   request<undefined>(`/categories/${id}`, { method: "DELETE" });
 
+export const listBudgetsRequest = () => request<BudgetInterface[]>("/budgets");
+
+export const createBudgetRequest = (input: BudgetInputInterface) =>
+  request<BudgetInterface>("/budgets", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const updateBudgetRequest = (
+  id: string,
+  changes: Partial<Omit<BudgetInputInterface, "categoryId">>,
+) =>
+  request<BudgetInterface>(`/budgets/${id}`, {
+    body: JSON.stringify(changes),
+    method: "PATCH",
+  });
+
+export const deleteBudgetRequest = (id: string) =>
+  request<undefined>(`/budgets/${id}`, { method: "DELETE" });
+
+export const listBudgetPeriodsRequest = () =>
+  request<BudgetPeriodInterface[]>("/budget-periods");
+
+export const createBudgetPeriodRequest = (input: BudgetPeriodInputInterface) =>
+  request<BudgetPeriodInterface>("/budget-periods", {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const updateBudgetPeriodRequest = (
+  id: string,
+  input: BudgetPeriodInputInterface,
+) =>
+  request<BudgetPeriodInterface>(`/budget-periods/${id}`, {
+    body: JSON.stringify(input),
+    method: "PATCH",
+  });
+
+export const deleteBudgetPeriodRequest = (id: string) =>
+  request<undefined>(`/budget-periods/${id}`, { method: "DELETE" });
+
+export const listBudgetGroupsRequest = () =>
+  request<BudgetGroupInterface[]>("/budget-groups");
+
+export const createBudgetGroupRequest = (name: string) =>
+  request<BudgetGroupInterface>("/budget-groups", {
+    body: JSON.stringify({ name }),
+    method: "POST",
+  });
+
+export const renameBudgetGroupRequest = (id: string, name: string) =>
+  request<BudgetGroupInterface>(`/budget-groups/${id}`, {
+    body: JSON.stringify({ name }),
+    method: "PATCH",
+  });
+
+export const deleteBudgetGroupRequest = (id: string) =>
+  request<undefined>(`/budget-groups/${id}`, { method: "DELETE" });
+
+export const listIngestTokensRequest = () =>
+  request<IngestTokenInterface[]>("/ingest-tokens");
+
+export const createIngestTokenRequest = (name: string) =>
+  request<IngestTokenInterface & { token: string }>("/ingest-tokens", {
+    body: JSON.stringify({ name }),
+    method: "POST",
+  });
+
+export const revokeIngestTokenRequest = (id: string) =>
+  request<undefined>(`/ingest-tokens/${id}`, { method: "DELETE" });
+
+export const listIngestEventsRequest = () =>
+  request<IngestEventInterface[]>("/ingest/events");
+
+export const retryIngestEventRequest = (id: string) =>
+  request<{ status: IngestEventStatus }>(`/ingest/events/${id}/retry`, {
+    method: "POST",
+  });
+
 export const listTransactionsRequest = () =>
   request<TransactionInterface[]>("/transactions");
 
@@ -175,13 +262,14 @@ export const updateTransactionRequest = (
   });
 
 export const previewStatementRequest = (input: {
-  accountId: string;
+  /** Section key to account id. Empty on the first read of a pocket statement. */
+  accounts: Record<string, string>;
   bank: string;
   file: File;
   password: string;
 }) => {
   const body = new FormData();
-  body.set("accountId", input.accountId);
+  body.set("accounts", JSON.stringify(input.accounts));
   body.set("bank", input.bank);
   body.set("password", input.password);
   body.set("file", input.file);
