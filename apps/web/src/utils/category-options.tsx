@@ -1,7 +1,7 @@
 import type { CategoryInterface } from "@fynlo/types";
 import type { SelectOption } from "@fynlo/ui/components/select";
 
-import { CategoryIcon } from "@/components/CategoryIcon";
+import { CategoryIcon, categoryStyle } from "@/components/CategoryIcon";
 
 /** Dropdown options for categories, listed under their groups. */
 export function categoryOptions(
@@ -14,7 +14,7 @@ export function categoryOptions(
       .map((category) => ({
         group: category.groupName,
         icon: (
-          <span className={`select-icon cat-${category.icon}`}>
+          <span className="select-icon" style={categoryStyle(category.color)}>
             <CategoryIcon className="size-3.5" icon={category.icon} />
           </span>
         ),

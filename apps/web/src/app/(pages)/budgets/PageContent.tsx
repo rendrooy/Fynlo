@@ -8,7 +8,7 @@ import { Pencil, Plus, Target } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
-import { CategoryIcon } from "@/components/CategoryIcon";
+import { CategoryIcon, categoryStyle } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/EmptyState";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
@@ -300,7 +300,10 @@ export default function PageContent() {
                     return (
                       <div className="card budget-card" key={budget.id}>
                         <div className="budget-title">
-                          <div className={`tx-icon cat-${category?.icon}`}>
+                          <div
+                            className="tx-icon"
+                            style={categoryStyle(category?.color)}
+                          >
                             <CategoryIcon icon={category?.icon ?? ""} />
                           </div>
                           <div>

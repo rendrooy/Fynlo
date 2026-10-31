@@ -12,7 +12,7 @@ import { ArrowLeft, Plus, Tags } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-import { CategoryIcon } from "@/components/CategoryIcon";
+import { CategoryIcon, categoryStyle } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/EmptyState";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
@@ -188,7 +188,10 @@ export default function PageContent() {
                 .filter((c) => c.groupId === group.id)
                 .map((category) => (
                   <div className="manage-row" key={category.id}>
-                    <div className={`tx-icon cat-${category.icon}`}>
+                    <div
+                      className="tx-icon"
+                      style={categoryStyle(category.color)}
+                    >
                       <CategoryIcon icon={category.icon} />
                     </div>
                     <div className="manage-copy">

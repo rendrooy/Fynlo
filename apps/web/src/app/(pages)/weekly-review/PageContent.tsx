@@ -128,6 +128,7 @@ export default function PageContent() {
                 key={t.id}
               >
                 <TransactionIcon
+                  color={category?.color}
                   icon={t.type === "transfer" ? "transfer" : category?.icon}
                 />
                 <div className="review-main">

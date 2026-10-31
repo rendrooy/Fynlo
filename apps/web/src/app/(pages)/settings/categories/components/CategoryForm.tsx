@@ -4,9 +4,15 @@ import type { CategoryInterface, CategoryType } from "@fynlo/types";
 
 import { Button } from "@fynlo/ui/components/button";
 import { Select } from "@fynlo/ui/components/select";
+import { Pipette } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
-import { CategoryIcon, categoryIconNames } from "@/components/CategoryIcon";
+import {
+  CategoryIcon,
+  categoryIconNames,
+  categoryStyle,
+  searchCategoryIcons,
+} from "@/components/CategoryIcon";
 import { useFinance } from "@/providers/finance-provider";
 import { ApiError } from "@/services/api";
 
@@ -17,6 +23,11 @@ const COLORS = [
   "#f59e0b",
   "#e11d48",
   "#64748b",
+  "#0f766e",
+  "#7c3aed",
+  "#db2777",
+  "#ea580c",
+  "#ca8a04",
 ];
 
 export function CategoryForm({
@@ -38,15 +49,20 @@ export function CategoryForm({
   const [groupId, setGroupId] = useState(
     editing?.groupId ?? defaultGroupId ?? groups[0]?.id ?? "",
   );
-  const [icon, setIcon] = useState<string>(
-    editing?.icon ?? (categoryIconNames[0] as string),
-  );
+  const [icon, setIcon] = useState<string>(editing?.icon ?? "tag");
   const [color, setColor] = useState<string>(
     editing?.color ?? (COLORS[0] as string),
   );
+  const [iconQuery, setIconQuery] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // The current icon stays visible, so a search never hides what's selected.
+  const matches = searchCategoryIcons(iconQuery);
+  const visibleIcons = iconQuery.trim()
+    ? matches
+    : [icon, ...categoryIconNames.filter((name) => name !== icon)];
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -107,14 +123,27 @@ export function CategoryForm({
 
       <fieldset className="color-field">
         <legend>Icon</legend>
-        <div>
-          {categoryIconNames.map((option) => (
+        <input
+          aria-label="Search icons"
+          className="icon-search"
+          onChange={(event) => setIconQuery(event.target.value)}
+          placeholder="Search icons, such as kopi or gym"
+          type="search"
+          value={iconQuery}
+        />
+        <div className="icon-grid">
+          {visibleIcons.length === 0 && (
+            <span className="icon-empty">No icons found</span>
+          )}
+          {visibleIcons.map((option) => (
             <button
               aria-label={`Icon ${option}`}
               aria-pressed={icon === option}
-              className={`tx-icon cat-${option} ${icon === option ? "active" : ""}`}
+              className={`tx-icon ${icon === option ? "active" : ""}`}
               key={option}
               onClick={() => setIcon(option)}
+              style={icon === option ? categoryStyle(color) : undefined}
+              title={option}
               type="button"
             >
               <CategoryIcon icon={option} />
@@ -124,7 +153,7 @@ export function CategoryForm({
       </fieldset>
 
       <fieldset className="color-field">
-        <legend>Chart color</legend>
+        <legend>Color</legend>
         <div>
           {COLORS.map((option) => (
             <button
@@ -137,6 +166,19 @@ export function CategoryForm({
               type="button"
             />
           ))}
+          <label
+            className={`color-custom ${COLORS.includes(color) ? "" : "active"}`}
+            style={{ background: color }}
+            title="Choose any color"
+          >
+            <Pipette aria-hidden="true" size={14} />
+            <input
+              aria-label="Custom color"
+              onChange={(event) => setColor(event.target.value)}
+              type="color"
+              value={color}
+            />
+          </label>
         </div>
       </fieldset>
 

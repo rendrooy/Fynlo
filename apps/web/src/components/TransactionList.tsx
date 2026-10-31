@@ -32,7 +32,10 @@ export function TransactionList({ items }: { items: TransactionInterface[] }) {
             onClick={() => openDetails(t)}
             type="button"
           >
-            <TransactionIcon icon={isTransfer ? "transfer" : category?.icon} />
+            <TransactionIcon
+              color={category?.color}
+              icon={isTransfer ? "transfer" : category?.icon}
+            />
             <div className="tx-main">
               <b>{t.name}</b>
               <span>

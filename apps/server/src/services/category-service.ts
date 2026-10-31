@@ -14,16 +14,8 @@ interface CategoryRow {
 }
 
 const UNIQUE_VIOLATION = "23505";
-const ICONS = [
-  "bag",
-  "car",
-  "film",
-  "home",
-  "laptop",
-  "receipt",
-  "utensils",
-  "wallet",
-];
+// Names only. The web app shows a default icon for one it doesn't know.
+const ICON = /^[a-z0-9-]{1,30}$/;
 const IS_REFERENCED = `(
   EXISTS (
     SELECT 1 FROM t_transaction t
@@ -181,7 +173,7 @@ async function parseGroup(userId: string, categoryId: string, value: unknown) {
 }
 
 function parseIcon(value: unknown) {
-  if (typeof value !== "string" || !ICONS.includes(value)) {
+  if (typeof value !== "string" || !ICON.test(value)) {
     throw invalid("Choose a valid icon");
   }
   return value;
