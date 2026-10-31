@@ -254,7 +254,10 @@ export const createTransactionRequest = (input: TransactionInputInterface) =>
 
 export const updateTransactionRequest = (
   id: string,
-  changes: Partial<TransactionInputInterface> & { status?: TransactionStatus },
+  changes: Partial<TransactionInputInterface> & {
+    isNotDuplicate?: boolean;
+    status?: TransactionStatus;
+  },
 ) =>
   request<TransactionInterface>(`/transactions/${id}`, {
     body: JSON.stringify(changes),
@@ -282,6 +285,12 @@ export const previewStatementRequest = (input: {
 export const importStatementRequest = (input: StatementImportInterface) =>
   request<{ imported: number }>("/statements/import", {
     body: JSON.stringify(input),
+    method: "POST",
+  });
+
+export const markNotDuplicateRequest = (ids: string[]) =>
+  request<{ updated: number }>("/transactions/not-duplicate", {
+    body: JSON.stringify({ ids }),
     method: "POST",
   });
 

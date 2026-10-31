@@ -49,6 +49,7 @@ import {
   createTransactionHandler,
   deleteTransactionHandler,
   listTransactionsHandler,
+  markNotDuplicateHandler,
   updateTransactionHandler,
 } from "../controller/transaction-controller";
 import { authMiddleware } from "../middleware/auth.middleware";
@@ -129,6 +130,11 @@ router.delete("/budget-groups/:id", authMiddleware, budgetGroupHandlers.remove);
 
 router.get("/transactions", authMiddleware, listTransactionsHandler);
 router.post("/transactions", authMiddleware, createTransactionHandler);
+router.post(
+  "/transactions/not-duplicate",
+  authMiddleware,
+  markNotDuplicateHandler,
+);
 router.patch("/transactions/:id", authMiddleware, updateTransactionHandler);
 router.delete("/transactions/:id", authMiddleware, deleteTransactionHandler);
 

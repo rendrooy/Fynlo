@@ -164,6 +164,7 @@ erDiagram
         varchar source "email, import, manual, shortcut"
         varchar status "review, verified"
         varchar reference "unique per user"
+        boolean is_not_duplicate
         boolean is_deleted
         timestamptz created_time
         timestamptz updated_time

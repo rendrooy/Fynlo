@@ -177,6 +177,8 @@ export interface TransactionInterface extends Omit<
   /** Null on transfers, and until an imported transaction is given a category. */
   categoryId: null | string;
   id: string;
+  /** The user checked this and decided it isn't a duplicate. */
+  isNotDuplicate: boolean;
   source: TransactionSource;
   status: TransactionStatus;
   toAccountId: null | string;
