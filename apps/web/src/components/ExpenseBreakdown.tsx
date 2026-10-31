@@ -1,12 +1,19 @@
 "use client";
 
 import { useFinance } from "@/providers/finance-provider";
-import { expenseBreakdown } from "@/utils/finance";
+import { type DateRange, expenseBreakdown } from "@/utils/finance";
 import { formatCompact, formatRupiah } from "@/utils/format";
 
-export function ExpenseBreakdown() {
+/** Without a range, this shows the current month. */
+export function ExpenseBreakdown({
+  periodLabel = "this month",
+  range,
+}: {
+  periodLabel?: string;
+  range?: DateRange;
+}) {
   const { categories, transactions } = useFinance();
-  const { rows, total } = expenseBreakdown(categories, transactions);
+  const { rows, total } = expenseBreakdown(categories, transactions, range);
 
   let start = 0;
   const stops = rows.map((row) => {
@@ -31,7 +38,7 @@ export function ExpenseBreakdown() {
         <div>
           <span>Total</span>
           <strong>Rp{formatCompact(total)}</strong>
-          <small>this month</small>
+          <small>{periodLabel}</small>
         </div>
       </div>
       <div className="category-list">

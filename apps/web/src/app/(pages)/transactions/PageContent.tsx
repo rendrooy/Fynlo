@@ -6,16 +6,26 @@ import { Select } from "@fynlo/ui/components/select";
 import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import {
+  currentMonthToDate,
+  DateRangeFilter,
+} from "@/components/DateRangeFilter";
 import { EmptyState } from "@/components/EmptyState";
+import { Pagination } from "@/components/Pagination";
 import { TransactionList } from "@/components/TransactionList";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { categoryOptions } from "@/utils/category-options";
-import { sortNewestFirst, touchesAccount } from "@/utils/finance";
+import {
+  type DateRangePreset,
+  resolveDateRange,
+  sortNewestFirst,
+  touchesAccount,
+} from "@/utils/finance";
 
 type TypeFilter = "all" | "expense" | "income" | "transfer";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZES = [10, 25, 50, 100];
 
 export default function PageContent() {
   const { accounts, categories, transactions, transactionsStatus } =
@@ -25,13 +35,20 @@ export default function PageContent() {
   const [type, setType] = useState<TypeFilter>("all");
   const [accountId, setAccountId] = useState("all");
   const [categoryId, setCategoryId] = useState("all");
+  const [preset, setPreset] = useState<DateRangePreset>("all");
+  const [custom, setCustom] = useState(currentMonthToDate);
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0] as number);
+
+  const { range } = resolveDateRange(preset, custom, transactions);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return sortNewestFirst(transactions).filter((t) => {
       const category = categories.find((c) => c.id === t.categoryId);
       return (
+        t.date >= range.from &&
+        t.date <= range.to &&
         (type === "all" || t.type === type) &&
         (accountId === "all" || touchesAccount(t, accountId)) &&
         (categoryId === "all" || t.categoryId === categoryId) &&
@@ -41,12 +58,21 @@ export default function PageContent() {
             .includes(needle))
       );
     });
-  }, [accountId, categories, categoryId, query, transactions, type]);
+  }, [
+    accountId,
+    categories,
+    categoryId,
+    query,
+    range.from,
+    range.to,
+    transactions,
+    type,
+  ]);
 
-  const pageCount = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1);
+  const pageCount = Math.max(Math.ceil(filtered.length / pageSize), 1);
   const safePage = Math.min(page, pageCount - 1);
-  const start = safePage * PAGE_SIZE;
-  const visible = filtered.slice(start, start + PAGE_SIZE);
+  const start = safePage * pageSize;
+  const visible = filtered.slice(start, start + pageSize);
 
   function exportCsv() {
     const quote = (value: number | string) =>
@@ -90,6 +116,20 @@ export default function PageContent() {
           Export CSV
         </Button>
       </div>
+
+      <DateRangeFilter
+        custom={custom}
+        onCustomChange={(next) => {
+          setCustom(next);
+          setPage(0);
+        }}
+        onPresetChange={(next) => {
+          setPreset(next);
+          setPage(0);
+        }}
+        preset={preset}
+        range={range}
+      />
 
       <div className="card filters">
         <div className="search-box">
@@ -190,28 +230,20 @@ export default function PageContent() {
             title="No matching transactions"
           />
         )}
-        <div className="pagination">
-          <span>
-            Showing {filtered.length ? start + 1 : 0}–{start + visible.length}{" "}
-            of {filtered.length}
-          </span>
-          <div>
-            <Button
-              disabled={safePage === 0}
-              kind="secondary"
-              onClick={() => setPage(safePage - 1)}
-            >
-              Previous
-            </Button>
-            <Button
-              disabled={safePage >= pageCount - 1}
-              kind="secondary"
-              onClick={() => setPage(safePage + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        <Pagination
+          onPageChange={(next) => {
+            setPage(next);
+            window.scrollTo({ top: 0 });
+          }}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(0);
+          }}
+          page={safePage}
+          pageSize={pageSize}
+          pageSizes={PAGE_SIZES}
+          total={filtered.length}
+        />
       </section>
 
       <button

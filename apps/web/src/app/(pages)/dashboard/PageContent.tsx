@@ -18,6 +18,11 @@ import { useState } from "react";
 
 import { CardHeader } from "@/components/CardHeader";
 import { CashflowChart } from "@/components/CashflowChart";
+import {
+  currentMonthToDate,
+  DATE_RANGE_PRESETS,
+  DateRangeFilter,
+} from "@/components/DateRangeFilter";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpenseBreakdown } from "@/components/ExpenseBreakdown";
 import { TransactionList } from "@/components/TransactionList";
@@ -26,27 +31,42 @@ import { useFinance } from "@/providers/finance-provider";
 import {
   accountBalance,
   biggestIncrease,
+  cashflowInRange,
   type CashflowPeriod,
-  cashflowSeries,
-  inMonth,
-  previousMonth,
+  type DateRangePreset,
+  resolveDateRange,
   sortNewestFirst,
   totalBalance,
   totals,
   touchesAccount,
+  transactionsInRange,
 } from "@/utils/finance";
-import { formatCompact, formatDayShort, formatRupiah } from "@/utils/format";
+import {
+  formatCompact,
+  formatDayShort,
+  formatRupiah,
+  toIsoDate,
+} from "@/utils/format";
 
 export default function PageContent() {
   const { accounts, accountsStatus, categories, transactions } = useFinance();
   const [period, setPeriod] = useState<CashflowPeriod>("daily");
+  const [preset, setPreset] = useState<DateRangePreset>("this-month");
+  const [custom, setCustom] = useState(currentMonthToDate);
 
-  const now = new Date();
-  const month = totals(inMonth(transactions, now));
-  const last = totals(inMonth(transactions, previousMonth(now)));
+  const { previous, range } = resolveDateRange(preset, custom, transactions);
+  const today = toIsoDate(new Date());
+  const inPeriod = transactionsInRange(transactions, range);
+  const month = totals(inPeriod);
+  const last = previous
+    ? totals(transactionsInRange(transactions, previous))
+    : null;
   const balance = totalBalance(accounts, transactions);
-  const series = cashflowSeries(transactions, period);
-  const recent = sortNewestFirst(transactions).slice(0, 6);
+  const series = cashflowInRange(transactions, range, period);
+  const recent = sortNewestFirst(inPeriod).slice(0, 6);
+  const periodLabel =
+    DATE_RANGE_PRESETS.find((p) => p.value === preset)?.label ?? "";
+  const compare = preset === "all" ? "" : compareLabel(preset);
   const insight = biggestIncrease(categories, transactions);
   const peak = Math.max(...(insight?.history ?? [1]), 1);
 
@@ -59,35 +79,52 @@ export default function PageContent() {
         </div>
       </div>
 
+      <DateRangeFilter
+        custom={custom}
+        onCustomChange={setCustom}
+        onPresetChange={setPreset}
+        preset={preset}
+        range={range}
+      />
+
       <div className="metric-grid">
         <MetricCard
-          change={percentChange(balance, balance - month.net)}
-          helper="vs start of month"
+          // Comparing to the period's start only means something if it reaches today.
+          change={
+            range.to >= today && preset !== "all"
+              ? percentChange(balance, balance - month.net)
+              : null
+          }
+          helper={
+            range.to >= today && preset !== "all"
+              ? "vs start of period"
+              : "balance today"
+          }
           icon={Wallet}
           title="Total Balance"
           tone="emerald"
           value={formatRupiah(balance)}
         />
         <MetricCard
-          change={percentChange(month.income, last.income)}
-          helper="vs last month"
+          change={last && percentChange(month.income, last.income)}
+          helper={compare}
           icon={ArrowUp}
           title="Total Income"
           tone="blue"
           value={formatRupiah(month.income)}
         />
         <MetricCard
-          change={percentChange(month.expense, last.expense)}
+          change={last && percentChange(month.expense, last.expense)}
           goodWhenUp={false}
-          helper="vs last month"
+          helper={compare}
           icon={ArrowDown}
           title="Total Expenses"
           tone="rose"
           value={formatRupiah(month.expense)}
         />
         <MetricCard
-          change={percentChange(month.net, last.net)}
-          helper="vs last month"
+          change={last && percentChange(month.net, last.net)}
+          helper={compare}
           icon={ChartColumn}
           title="Net Cash Flow"
           tone="violet"
@@ -135,7 +172,10 @@ export default function PageContent() {
             subtitle="By category"
             title="Expenses"
           />
-          <ExpenseBreakdown />
+          <ExpenseBreakdown
+            periodLabel={periodLabel.toLowerCase()}
+            range={range}
+          />
         </section>
       </div>
 
@@ -211,16 +251,24 @@ export default function PageContent() {
                 See All <ArrowRight aria-hidden="true" size={15} />
               </Link>
             }
-            subtitle="Latest activity across all accounts"
+            subtitle="Latest activity in this period"
             title="Recent Transactions"
           />
           {recent.length > 0 ? (
             <TransactionList items={recent} />
           ) : (
             <EmptyState
-              description="Your latest activity will appear here."
+              description={
+                transactions.length === 0
+                  ? "Your latest activity will appear here."
+                  : "Try a different date range."
+              }
               icon={ArrowLeftRight}
-              title="No transactions yet"
+              title={
+                transactions.length === 0
+                  ? "No transactions yet"
+                  : "No transactions in this period"
+              }
             />
           )}
         </section>
@@ -273,6 +321,13 @@ export default function PageContent() {
   );
 }
 
+function compareLabel(preset: DateRangePreset) {
+  if (preset === "this-month" || preset === "last-month") {
+    return "vs previous month";
+  }
+  return preset === "this-year" ? "vs last year" : "vs previous period";
+}
+
 function greeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -288,7 +343,8 @@ function MetricCard({
   tone,
   value,
 }: {
-  change: number;
+  /** Null when there's nothing to compare against. */
+  change: null | number;
   goodWhenUp?: boolean;
   helper: string;
   icon: LucideIcon;
@@ -296,7 +352,7 @@ function MetricCard({
   tone: string;
   value: string;
 }) {
-  const up = change >= 0;
+  const up = (change ?? 0) >= 0;
   const Arrow = up ? ArrowUp : ArrowDown;
   return (
     <div className="card metric-card">
@@ -309,7 +365,7 @@ function MetricCard({
       </div>
       <div className="metric-value">{value}</div>
       <div className="metric-foot">
-        {change === 0 ? (
+        {change === null ? null : change === 0 ? (
           <Badge>0%</Badge>
         ) : (
           <Badge tone={up === goodWhenUp ? "success" : "danger"}>

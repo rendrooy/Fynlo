@@ -185,9 +185,14 @@ export function cashflowSeries(
 export function expenseBreakdown(
   categories: CategoryInterface[],
   transactions: TransactionInterface[],
-  month = new Date(),
+  period: Date | { from: string; to: string } = new Date(),
 ) {
-  const monthItems = inMonth(transactions, month);
+  const monthItems =
+    period instanceof Date
+      ? inMonth(transactions, period)
+      : transactions.filter(
+          (t) => t.date >= period.from && t.date <= period.to,
+        );
   const total = totals(monthItems).expense;
   const rows = [...spentByCategory(monthItems).entries()]
     .map(([categoryId, amount]) => {
@@ -283,6 +288,20 @@ function sumBetween(
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+export interface DateRange {
+  from: string;
+  to: string;
+}
+
+export type DateRangePreset =
+  | "all"
+  | "custom"
+  | "last-30"
+  | "last-90"
+  | "last-month"
+  | "this-month"
+  | "this-year";
+
 /** Average spending per weekday, counted only over days that had spending. */
 export function weekdayAverages(transactions: TransactionInterface[]) {
   const buckets = WEEKDAYS.map((label) => ({
@@ -301,4 +320,141 @@ export function weekdayAverages(transactions: TransactionInterface[]) {
     label,
     value: days.size > 0 ? total / days.size : 0,
   }));
+}
+
+const inRange = (t: TransactionInterface, { from, to }: DateRange) =>
+  t.date >= from && t.date <= to;
+
+export const transactionsInRange = (
+  transactions: TransactionInterface[],
+  range: DateRange,
+) => transactions.filter((t) => inRange(t, range));
+
+/** The dates of a preset, and the period to compare against. "all" has nothing to compare. */
+export function resolveDateRange(
+  preset: DateRangePreset,
+  custom: DateRange,
+  transactions: TransactionInterface[],
+  today = new Date(),
+): { previous: DateRange | null; range: DateRange } {
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const iso = toIsoDate(today);
+  const span = (from: Date, to: Date) => ({
+    from: toIsoDate(from),
+    to: toIsoDate(to),
+  });
+  // The same number of days, ending the day before.
+  const before = ({ from, to }: DateRange) => {
+    const start = parseIsoDate(from);
+    const days = Math.round(
+      (parseIsoDate(to).getTime() - start.getTime()) / DAY_MS,
+    );
+    return span(addDays(start, -days - 1), addDays(start, -1));
+  };
+  const lastDays = (count: number) => {
+    const range = span(addDays(today, 1 - count), today);
+    return { previous: before(range), range };
+  };
+
+  switch (preset) {
+    case "all": {
+      const dates = transactions.map((t) => t.date).sort();
+      return {
+        previous: null,
+        range: { from: dates[0] ?? iso, to: dates.at(-1) ?? iso },
+      };
+    }
+    case "custom": {
+      // Dates entered backward still mean the same period.
+      const range =
+        custom.from <= custom.to
+          ? custom
+          : { from: custom.to, to: custom.from };
+      return { previous: before(range), range };
+    }
+    case "last-30":
+      return lastDays(30);
+    case "last-90":
+      return lastDays(90);
+    case "last-month":
+      return {
+        previous: span(
+          new Date(year, month - 2, 1),
+          new Date(year, month - 1, 0),
+        ),
+        range: span(new Date(year, month - 1, 1), new Date(year, month, 0)),
+      };
+    case "this-month":
+      return {
+        previous: span(new Date(year, month - 1, 1), new Date(year, month, 0)),
+        range: span(new Date(year, month, 1), new Date(year, month + 1, 0)),
+      };
+    case "this-year":
+      return {
+        previous: span(new Date(year - 1, 0, 1), new Date(year - 1, 11, 31)),
+        range: span(new Date(year, 0, 1), new Date(year, 11, 31)),
+      };
+  }
+}
+
+const MAX_DAILY_POINTS = 186;
+const MAX_WEEKLY_POINTS = 104;
+
+/** Income and expenses across a range. Very long ranges group more coarsely to stay readable. */
+export function cashflowInRange(
+  transactions: TransactionInterface[],
+  range: DateRange,
+  period: CashflowPeriod,
+  today = new Date(),
+) {
+  const todayIso = toIsoDate(today);
+  // Days that haven't happened yet would only draw a flat line.
+  const to =
+    range.from <= todayIso && range.to > todayIso ? todayIso : range.to;
+  const start = parseIsoDate(range.from);
+  const end = parseIsoDate(to);
+  const days = Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1;
+  const spansYears = start.getFullYear() !== end.getFullYear();
+
+  const unit =
+    period === "monthly" ||
+    (period === "weekly" && days / 7 > MAX_WEEKLY_POINTS) ||
+    (period === "daily" && days / 7 > MAX_WEEKLY_POINTS)
+      ? "monthly"
+      : period === "weekly" || days > MAX_DAILY_POINTS
+        ? "weekly"
+        : "daily";
+
+  if (unit === "monthly") {
+    const points = [];
+    let month = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (month <= end) {
+      const next = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+      const from = month < start ? range.from : toIsoDate(month);
+      const last = addDays(next, -1);
+      points.push({
+        ...sumBetween(transactions, from, last > end ? to : toIsoDate(last)),
+        label: spansYears
+          ? month.toLocaleDateString("en-GB", {
+              month: "short",
+              year: "2-digit",
+            })
+          : formatMonthShort(month),
+      });
+      month = next;
+    }
+    return points;
+  }
+
+  const size = unit === "weekly" ? 7 : 1;
+  return Array.from({ length: Math.ceil(days / size) }, (_, index) => {
+    const first = addDays(start, index * size);
+    const last = addDays(first, size - 1);
+    const from = toIsoDate(first);
+    return {
+      ...sumBetween(transactions, from, last > end ? to : toIsoDate(last)),
+      label: formatDayShort(from),
+    };
+  });
 }
