@@ -10,7 +10,12 @@ const app: express.Express = express();
 app.disable("x-powered-by");
 app.set("trust proxy", serverConfig.trustProxy);
 app.use(cors({ credentials: true, origin: serverConfig.corsOrigins }));
-app.use(express.json({ limit: "1mb" }));
+app.use(
+  express.json({
+    // A year of statements can reach 5,000 rows at about 300 bytes each.
+    limit: "2mb",
+  }),
+);
 
 app.use("/v1", routes);
 

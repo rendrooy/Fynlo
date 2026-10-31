@@ -41,6 +41,7 @@ const SUMMARY_LABEL_X = [310, 330];
 // A tall row vertically centers its date, so its other columns can start above it.
 const ROW_RISE = 9;
 const MAX_ROW_NAME = 100;
+const POCKET_RISE = 8;
 
 const DATE = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4})$/;
 const TIME = /^(\d{2})\.(\d{2})$/;
@@ -102,13 +103,16 @@ export function parseJago(items: PdfTextItem[]): ParsedStatement {
   const closingMarker = lines.find((line) => line.text === "INFO PENTING");
 
   const sections = pockets.map((pocket, index) => {
+    // The next pocket's summary starts slightly above its title.
+    const next = pockets[index + 1];
     const end =
-      pockets[index + 1]?.position ??
+      (next ? next.position - POCKET_RISE : undefined) ??
       closingMarker?.position ??
       Number.POSITIVE_INFINITY;
     return parsePocket(
       lines.filter(
-        (line) => line.position >= pocket.position - 8 && line.position < end,
+        (line) =>
+          line.position >= pocket.position - POCKET_RISE && line.position < end,
       ),
       pocket,
       names,

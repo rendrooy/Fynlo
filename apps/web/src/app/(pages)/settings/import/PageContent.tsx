@@ -23,16 +23,31 @@ import { ApiError, previewStatementRequest } from "@/services/api";
 import { categoryOptions } from "@/utils/category-options";
 import { accountLabel } from "@/utils/finance";
 import { formatDayShort, formatRupiah } from "@/utils/format";
+import { mergeStatements, type StatementGap } from "@/utils/statement-merge";
 
 // Marks a dropdown value as the other side of a transfer, not a category.
 const TRANSFER = "transfer:";
 const SKIP = "skip";
 const SINGLE_SECTION = "main";
+const MAX_FILES = 12;
+
+interface FileResult {
+  count?: number;
+  error?: string;
+  name: string;
+}
 
 const errorText = (error: unknown) =>
   error instanceof ApiError
     ? error.message
     : "Something went wrong. Please try again.";
+
+const fileHash = async (file: File) =>
+  Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", await file.arrayBuffer()),
+    ),
+  ).join();
 
 const rowKey = (section: StatementSectionInterface, index: number) =>
   `${section.key}:${index}`;
@@ -47,7 +62,15 @@ export default function PageContent() {
     params.get("accountId") ?? "",
   );
   const [bank, setBank] = useState(statementBanks[0]?.value ?? "");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<null | {
+    done: number;
+    name: string;
+    total: number;
+  }>(null);
+  const [fileResults, setFileResults] = useState<FileResult[]>([]);
+  const [gaps, setGaps] = useState<StatementGap[]>([]);
+  const [mismatchedKeys, setMismatchedKeys] = useState<string[]>([]);
   const [password, setPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -108,75 +131,106 @@ export default function PageContent() {
   const mappedIds = Object.values(pocketAccounts).filter((id) => id !== SKIP);
   const hasRepeatedAccount = new Set(mappedIds).size !== mappedIds.length;
 
+  /** Sends one file at a time, for real progress and to keep the server's memory low. */
+  async function readFiles(chosen: Record<string, string>) {
+    const results: FileResult[] = [];
+    const statements: { name: string; preview: StatementPreviewInterface }[] =
+      [];
+    const hashes = new Map<string, string>();
+    for (const [index, file] of files.entries()) {
+      setProgress({ done: index, name: file.name, total: files.length });
+      const hash = await fileHash(file);
+      const original = hashes.get(hash);
+      if (original) {
+        results.push({
+          error: `Same file as ${original}, skipped`,
+          name: file.name,
+        });
+        continue;
+      }
+      hashes.set(hash, file.name);
+      try {
+        const result = await previewStatementRequest({
+          accounts: chosen,
+          bank,
+          file,
+          password,
+        });
+        statements.push({ name: file.name, preview: result });
+        results.push({
+          count: result.sections.reduce(
+            (sum, section) => sum + section.rows.length,
+            0,
+          ),
+          name: file.name,
+        });
+      } catch (caught) {
+        results.push({ error: errorText(caught), name: file.name });
+      }
+    }
+    setProgress(null);
+    setFileResults(results);
+    return { results, statements };
+  }
+
   async function loadPreview(chosen: Record<string, string>) {
-    if (!file) return;
     setError("");
     setBusy(true);
-    try {
-      const result = await previewStatementRequest({
-        accounts: chosen,
-        bank,
-        file,
-        password,
-      });
-      const chosenSections = result.sections.filter((s) => s.accountId);
-      setPreview(result);
-      setExcluded(
-        new Set(
-          chosenSections.flatMap((section) =>
-            section.rows.flatMap((row, index) =>
-              row.isDuplicate ? [rowKey(section, index)] : [],
-            ),
+    const { results, statements } = await readFiles(chosen);
+    setBusy(false);
+    if (statements.length === 0) {
+      setError(results[0]?.error ?? "No statement could be read");
+      return;
+    }
+    const merged = mergeStatements(statements);
+    const chosenSections = merged.preview.sections.filter((s) => s.accountId);
+    setPreview(merged.preview);
+    setGaps(merged.gaps);
+    setMismatchedKeys(merged.mismatchedKeys);
+    setExcluded(
+      new Set(
+        chosenSections.flatMap((section) =>
+          section.rows.flatMap((row, index) =>
+            row.isDuplicate ? [rowKey(section, index)] : [],
           ),
         ),
-      );
-      setChosenCategories({});
-      // A long statement stays scannable: only the first pocket starts open.
-      setCollapsed(new Set(chosenSections.slice(1).map((s) => s.key)));
-      setOpeningKeys(
-        new Set(
-          chosenSections
-            .filter((s) => s.canSetOpeningBalance)
-            .map((s) => s.key),
-        ),
-      );
-      setPassword("");
-    } catch (caught) {
-      setError(errorText(caught));
-    } finally {
-      setBusy(false);
-    }
+      ),
+    );
+    setChosenCategories({});
+    // A long statement stays scannable: only the first pocket starts open.
+    setCollapsed(new Set(chosenSections.slice(1).map((s) => s.key)));
+    setOpeningKeys(
+      new Set(
+        chosenSections.filter((s) => s.canSetOpeningBalance).map((s) => s.key),
+      ),
+    );
   }
 
   async function read(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    if (!file) return;
+    if (files.length === 0 || files.length > MAX_FILES) return;
     if (!hasPockets) {
       if (accountId) await loadPreview({ [SINGLE_SECTION]: accountId });
       return;
     }
     setError("");
     setBusy(true);
-    try {
-      const { sections: found } = await previewStatementRequest({
-        accounts: {},
-        bank,
-        file,
-        password,
-      });
-      const active = found.filter((s) => s.rows.length > 0);
-      setPockets(active);
-      setPocketAccounts(
-        Object.fromEntries(
-          active.map((s) => [s.key, s.suggestedAccountId ?? SKIP]),
-        ),
-      );
-    } catch (caught) {
-      setError(errorText(caught));
-    } finally {
-      setBusy(false);
+    const { results, statements } = await readFiles({});
+    setBusy(false);
+    if (statements.length === 0) {
+      setError(results[0]?.error ?? "No statement could be read");
+      return;
     }
+    const active = mergeStatements(statements).preview.sections.filter(
+      (s) => s.rows.length > 0,
+    );
+    setPockets(active);
+    setPocketAccounts(
+      Object.fromEntries(
+        active.map((s) => [s.key, s.suggestedAccountId ?? SKIP]),
+      ),
+    );
   }
 
   async function save() {
@@ -233,6 +287,43 @@ export default function PageContent() {
     setOpeningKeys(next);
   }
 
+  const fileList = fileResults.length > 1 && (
+    <div className="card manage-list import-files">
+      {fileResults.map((result) => (
+        <div className="manage-row" key={result.name}>
+          <div className="manage-copy">
+            <b>{result.name}</b>
+            <span>
+              {result.error ??
+                `${result.count} ${result.count === 1 ? "transaction" : "transactions"}`}
+            </span>
+          </div>
+          <Badge tone={result.error ? "warning" : "success"}>
+            {result.error ? "Not included" : "Read"}
+          </Badge>
+        </div>
+      ))}
+    </div>
+  );
+
+  const progressBar = progress && (
+    <div className="import-progress">
+      <span>
+        Reading {progress.done + 1} of {progress.total}: {progress.name}
+      </span>
+      <div
+        aria-label="Reading statements"
+        aria-valuemax={progress.total}
+        aria-valuemin={0}
+        aria-valuenow={progress.done}
+        className="progress"
+        role="progressbar"
+      >
+        <i style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+      </div>
+    </div>
+  );
+
   const accountById = (id: null | string): AccountInterface | undefined =>
     accounts.find((a) => a.id === id);
 
@@ -279,19 +370,27 @@ export default function PageContent() {
             )}
           </div>
           <label>
-            Statement PDF
+            Statement PDFs
             <input
               accept="application/pdf,.pdf"
               className="file-input"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              multiple
+              onChange={(event) =>
+                setFiles(Array.from(event.target.files ?? []))
+              }
               type="file"
             />
-            {submitted && !file && (
+            {submitted && files.length === 0 && (
               <span className="field-error">Choose a PDF file</span>
+            )}
+            {files.length > MAX_FILES && (
+              <span className="field-error">
+                Choose at most {MAX_FILES} files at once
+              </span>
             )}
           </label>
           <label>
-            PDF password (if locked)
+            PDF password (if locked, the same for all files)
             <input
               autoComplete="off"
               onChange={(event) => setPassword(event.target.value)}
@@ -300,9 +399,10 @@ export default function PageContent() {
             />
           </label>
           <p className="import-note">
-            The file and password are used only to read this statement. Neither
-            is saved.
+            Files and the password are used only to read these statements.
+            Neither is saved.
           </p>
+          {progressBar}
           {error && (
             <p className="field-error" role="alert">
               {error}
@@ -321,6 +421,7 @@ export default function PageContent() {
 
       {pockets && !preview && (
         <>
+          {fileList}
           <div className="section-heading">
             <div>
               <h2>Choose an account for each pocket</h2>
@@ -368,6 +469,7 @@ export default function PageContent() {
               </div>
             ))}
           </div>
+          {progressBar}
           {hasRepeatedAccount && (
             <p className="field-error" role="alert">
               Choose a different account for each pocket
@@ -408,6 +510,19 @@ export default function PageContent() {
 
       {preview && (
         <>
+          {fileList}
+          {gaps.map((gap) => (
+            <div className="notice" key={`${gap.sectionKey}${gap.to}`}>
+              <Info aria-hidden="true" size={20} />
+              <div>
+                <b>A statement may be missing</b>
+                <span>
+                  {gap.from} ends at {formatRupiah(gap.fromBalance)}, but{" "}
+                  {gap.to} starts at {formatRupiah(gap.toBalance)}.
+                </span>
+              </div>
+            </div>
+          ))}
           <div className="card import-summary">
             <div>
               <span>Selected</span>
@@ -458,6 +573,15 @@ export default function PageContent() {
                   <ChevronDown aria-hidden="true" size={18} />
                 </button>
                 <div hidden={isCollapsed}>
+                  {mismatchedKeys.includes(section.key) && (
+                    <div className="notice mb-4">
+                      <Info aria-hidden="true" size={20} />
+                      <div>
+                        <b>These files show different account numbers</b>
+                        <span>Check that they all belong to this account.</span>
+                      </div>
+                    </div>
+                  )}
                   {section.isDifferentAccount && (
                     <div className="notice mb-4">
                       <Info aria-hidden="true" size={20} />
