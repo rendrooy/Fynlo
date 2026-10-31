@@ -4,6 +4,7 @@ import { Button } from "@fynlo/ui/components/button";
 import { Segmented } from "@fynlo/ui/components/segmented";
 import { Select } from "@fynlo/ui/components/select";
 import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
@@ -28,12 +29,26 @@ type TypeFilter = "all" | "expense" | "income" | "transfer";
 const PAGE_SIZES = [10, 25, 50, 100];
 
 export default function PageContent() {
-  const { accounts, categories, transactions, transactionsStatus } =
-    useFinance();
+  const {
+    accounts,
+    accountsStatus,
+    categories,
+    transactions,
+    transactionsStatus,
+  } = useFinance();
   const { openSheet, toast } = useTransactionSheet();
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TypeFilter>("all");
-  const [accountId, setAccountId] = useState("all");
+  const params = useSearchParams();
+  const [chosenAccountId, setAccountId] = useState(
+    params.get("accountId") ?? "all",
+  );
+  // A saved link can point to an account that has since been deleted.
+  const accountId =
+    accountsStatus === "ready" &&
+    !accounts.some((account) => account.id === chosenAccountId)
+      ? "all"
+      : chosenAccountId;
   const [categoryId, setCategoryId] = useState("all");
   const [preset, setPreset] = useState<DateRangePreset>("all");
   const [custom, setCustom] = useState(currentMonthToDate);

@@ -1,5 +1,11 @@
+import { Suspense } from "react";
+
 import PageContent from "./PageContent";
 
 export default function TransactionsPage() {
-  return <PageContent />;
+  return (
+    <Suspense>
+      <PageContent />
+    </Suspense>
+  );
 }
