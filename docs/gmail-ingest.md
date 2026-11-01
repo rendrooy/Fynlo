@@ -23,9 +23,9 @@ Make a small transaction, wait a few minutes, then open **Settings → Automatio
 
 | Status          | Meaning                                      | What to do                                                |
 | --------------- | -------------------------------------------- | --------------------------------------------------------- |
-| Recorded        | A new transaction was created                | Confirm it in Weekly Review                               |
+| Recorded        | A new transaction was created                | Confirm it in Review                               |
 | Matched         | It joined a transaction that already existed | Nothing                                                   |
-| Check duplicate | Other transactions look the same             | Check them in Weekly Review                               |
+| Check duplicate | Other transactions look the same             | Check them in Review                               |
 | No account      | No account has these last 4 digits           | Fill in the account's last 4 digits, then press Retry     |
 | Couldn't read   | The email format isn't supported yet         | Share a sample so a parser can be added, then press Retry |
 | Ignored         | It isn't a transaction, such as a promotion  | Nothing                                                   |

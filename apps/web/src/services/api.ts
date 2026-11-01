@@ -122,6 +122,15 @@ export const updateAccountRequest = (
     method: "PATCH",
   });
 
+export const adjustBalanceRequest = (
+  id: string,
+  input: { balance: number; date: string; note: string },
+) =>
+  request<TransactionInterface>(`/accounts/${id}/adjust-balance`, {
+    body: JSON.stringify(input),
+    method: "POST",
+  });
+
 export const deleteAccountRequest = (id: string) =>
   request<undefined>(`/accounts/${id}`, { method: "DELETE" });
 

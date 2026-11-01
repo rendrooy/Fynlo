@@ -18,12 +18,21 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { TransactionIcon } from "@/components/CategoryIcon";
+import {
+  currentMonthToDate,
+  DateRangeFilter,
+} from "@/components/DateRangeFilter";
 import { sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { ApiError } from "@/services/api";
-import { accountLabel, sortNewestFirst } from "@/utils/finance";
-import { formatDayShort, formatRupiah, toIsoDate } from "@/utils/format";
+import {
+  accountLabel,
+  type DateRangePreset,
+  resolveDateRange,
+  sortNewestFirst,
+} from "@/utils/finance";
+import { formatDayShort, formatRupiah } from "@/utils/format";
 
 type ReviewFilter = "detected" | "duplicates" | "review" | "uncategorized";
 
@@ -32,27 +41,27 @@ const FILTER_TEXT: Record<
   { description: string; emptyText: string; emptyTitle: string; title: string }
 > = {
   detected: {
-    description: "Recorded automatically in the last 7 days.",
-    emptyText: "Nothing was recorded automatically this week.",
+    description: "Recorded automatically in this period.",
+    emptyText: "Nothing was recorded automatically in this period.",
     emptyTitle: "No detected transactions",
     title: "Detected Transactions",
   },
   duplicates: {
     description:
       "These share the same date, name, and amount. Marking one clears its whole group.",
-    emptyText: "No transactions look the same.",
+    emptyText: "No transactions in this period look the same.",
     emptyTitle: "No possible duplicates",
     title: "Possible Duplicates",
   },
   review: {
     description: "Make sure the details below are correct.",
-    emptyText: "You are all caught up for this week.",
+    emptyText: "You are all caught up for this period.",
     emptyTitle: "Nothing to review",
     title: "Needs Review",
   },
   uncategorized: {
     description: "Open Details, then Edit, to choose a category.",
-    emptyText: "Every transaction has a category.",
+    emptyText: "Every transaction in this period has a category.",
     emptyTitle: "Nothing uncategorized",
     title: "Uncategorized",
   },
@@ -70,18 +79,11 @@ export default function PageContent() {
   const { openDetails, openSheet, toast } = useTransactionSheet();
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [filter, setFilter] = useState<ReviewFilter>("review");
+  const [preset, setPreset] = useState<DateRangePreset>("month-to-date");
+  const [custom, setCustom] = useState(currentMonthToDate);
 
-  const now = new Date();
-  const weekStart = toIsoDate(
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6),
-  );
-  const pending = sortNewestFirst(transactions).filter(
-    (t) => t.status === "review",
-  );
+  const { range } = resolveDateRange(preset, custom, transactions);
   const newest = sortNewestFirst(transactions);
-  const reviewList = newest.filter(
-    (t) => t.status === "review" || confirmed.includes(t.id),
-  );
   const duplicateKey = (t: (typeof transactions)[number]) =>
     `${t.date}|${t.name}|${t.amount}`;
   const keyCounts = new Map<string, number>();
@@ -97,18 +99,30 @@ export default function PageContent() {
       )
       .map(duplicateKey),
   );
-  const lists: Record<ReviewFilter, typeof transactions> = {
-    detected: newest.filter(
-      (t) => t.date >= weekStart && t.source !== "manual",
-    ),
+  const everywhere: Record<ReviewFilter, typeof transactions> = {
+    detected: newest.filter((t) => t.source !== "manual"),
     // Copies stay next to each other, so they're easy to compare.
     duplicates: newest
       .filter((t) => unsettledKeys.has(duplicateKey(t)))
       .sort((a, b) => duplicateKey(b).localeCompare(duplicateKey(a))),
-    review: reviewList,
+    review: newest.filter(
+      (t) => t.status === "review" || confirmed.includes(t.id),
+    ),
     uncategorized: newest.filter((t) => !t.categoryId && t.type !== "transfer"),
   };
+  const inPeriod = (list: typeof transactions) =>
+    list.filter((t) => t.date >= range.from && t.date <= range.to);
+  const lists: Record<ReviewFilter, typeof transactions> = {
+    detected: inPeriod(everywhere.detected),
+    duplicates: inPeriod(everywhere.duplicates),
+    review: inPeriod(everywhere.review),
+    uncategorized: inPeriod(everywhere.uncategorized),
+  };
+  const reviewList = lists.review;
+  const pending = reviewList.filter((t) => t.status === "review");
+  const doneCount = reviewList.length - pending.length;
   const shown = lists[filter];
+  const outsideCount = everywhere[filter].length - shown.length;
   const text = FILTER_TEXT[filter];
   const metrics: {
     count: number;
@@ -146,13 +160,21 @@ export default function PageContent() {
 
   return (
     <div className="page">
+      <DateRangeFilter
+        custom={custom}
+        onCustomChange={setCustom}
+        onPresetChange={setPreset}
+        preset={preset}
+        range={range}
+      />
+
       <div className="review-hero">
         <div>
           <Badge tone="warning">
-            REVIEW {formatDayShort(weekStart).toUpperCase()}–
-            {formatDayShort(toIsoDate(now)).toUpperCase()}
+            REVIEW {formatDayShort(range.from).toUpperCase()}–
+            {formatDayShort(range.to).toUpperCase()}
           </Badge>
-          <h1>Tidy up this week&apos;s finances</h1>
+          <h1>Tidy up your finances</h1>
           <p>
             Confirm automatically detected transactions to keep your reports
             accurate.
@@ -160,7 +182,7 @@ export default function PageContent() {
         </div>
         <div className="review-score">
           <strong>
-            {confirmed.length}/{reviewList.length}
+            {doneCount}/{reviewList.length}
           </strong>
           <span>done</span>
         </div>
@@ -190,6 +212,18 @@ export default function PageContent() {
               <p>{text.description}</p>
             </div>
           </div>
+          {outsideCount > 0 && (
+            <p className="review-outside">
+              {outsideCount} more outside this period.{" "}
+              <button
+                className="text-link"
+                onClick={() => setPreset("all")}
+                type="button"
+              >
+                Show all time
+              </button>
+            </p>
+          )}
           {shown.length === 0 && (
             <div className="card empty">
               <div>
@@ -319,7 +353,7 @@ export default function PageContent() {
           <b>Finished checking?</b>
           <span>
             {pending.length > 0
-              ? `You still have ${pending.length} transactions to confirm.`
+              ? `You still have ${pending.length} ${pending.length === 1 ? "transaction" : "transactions"} to confirm.`
               : "Everything has been confirmed."}
           </span>
         </div>
@@ -327,13 +361,13 @@ export default function PageContent() {
           onClick={() =>
             toast(
               pending.length === 0
-                ? "Weekly review complete"
+                ? "Review complete"
                 : "Confirm every transaction first",
             )
           }
         >
           <Check aria-hidden="true" size={17} />
-          Finish Weekly Review
+          Finish Review
         </Button>
       </div>
     </div>

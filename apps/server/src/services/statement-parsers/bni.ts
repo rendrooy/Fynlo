@@ -123,8 +123,16 @@ export function parseBni(items: PdfTextItem[]): ParsedStatement {
   });
 
   if (balance !== closing.cents) throw unreadable();
-  checkTotal(lines, "Total Pemasukan", rows, "income");
-  checkTotal(lines, "Total Pengeluaran", rows, "expense");
+  // Every amount on the statement has to belong to a row, so none can slip past the balances.
+  const amounts = lines.filter(
+    (line) =>
+      line.position > opening.position &&
+      line.position < closing.position &&
+      inColumn(line.x, AMOUNT_COLUMN) &&
+      SIGNED_AMOUNT.test(line.text),
+  );
+  if (amounts.length !== rows.length) throw unreadable();
+  const printedTotals = readPrintedTotals(lines, rows);
 
   const account = lines
     .find((line) => /^[A-Z ]+ - \d{4,}$/.test(line.text))
@@ -138,33 +146,11 @@ export function parseBni(items: PdfTextItem[]): ParsedStatement {
         key: `bni-${account ?? "unknown"}`,
         name: "BNI",
         openingBalance: opening.cents / 100,
+        printedTotals,
         rows,
       },
     ],
   };
-}
-
-/** The summary at the top of the statement is a second, independent check. */
-function checkTotal(
-  lines: (PdfTextItem & { position: number })[],
-  label: string,
-  rows: ParsedStatementRow[],
-  type: ParsedStatementRow["type"],
-) {
-  const title = lines.find((line) => line.text === label);
-  const value = lines.find(
-    (line) =>
-      title &&
-      SIGNED_AMOUNT.test(line.text) &&
-      line.position > title.position &&
-      line.position < title.position + 30 &&
-      Math.abs(line.x - title.x) < 30,
-  );
-  if (!value) throw unreadable();
-  const total = rows
-    .filter((row) => row.type === type)
-    .reduce((sum, row) => sum + Math.round(row.amount * 100), 0);
-  if (Math.abs(toCents(value.text)) !== total) throw unreadable();
 }
 
 function findBalanceRow(
@@ -190,4 +176,37 @@ function parseDate(text: string) {
   const monthNumber = MONTHS[(month ?? "").toLowerCase()];
   if (!day || !monthNumber || !year) throw unreadable();
   return `${year}-${monthNumber}-${day.padStart(2, "0")}`;
+}
+
+/**
+ * BNI's printed totals sometimes disagree with the rows it lists: December 2025 doesn't lead
+ * from opening to closing, and March 2026 counts money in and out that no row shows. The running
+ * balances are the proof, so a disagreement is reported rather than refused.
+ */
+function readPrintedTotals(
+  lines: (PdfTextItem & { position: number })[],
+  rows: ParsedStatementRow[],
+) {
+  const printed = (label: string) => {
+    const title = lines.find((line) => line.text === label);
+    const value = lines.find(
+      (line) =>
+        title &&
+        SIGNED_AMOUNT.test(line.text) &&
+        line.position > title.position &&
+        line.position < title.position + 30 &&
+        Math.abs(line.x - title.x) < 30,
+    );
+    if (!value) throw unreadable();
+    return Math.abs(toCents(value.text));
+  };
+  const total = (type: ParsedStatementRow["type"]) =>
+    rows
+      .filter((row) => row.type === type)
+      .reduce((sum, row) => sum + Math.round(row.amount * 100), 0);
+  const income = printed("Total Pemasukan");
+  const expense = printed("Total Pengeluaran");
+  return income === total("income") && expense === total("expense")
+    ? null
+    : { expense: expense / 100, income: income / 100 };
 }

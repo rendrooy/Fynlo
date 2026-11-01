@@ -4,6 +4,14 @@ import type {
   StatementSectionInterface,
 } from "@fynlo/types";
 
+/** Saved transactions end at a different balance than this statement starts with. */
+export interface StatementBreak {
+  file: string;
+  opening: number;
+  saved: number;
+  sectionKey: string;
+}
+
 export interface StatementGap {
   /** Statement file where the balance ends. */
   from: string;
@@ -12,6 +20,15 @@ export interface StatementGap {
   /** Statement file where the next balance starts. */
   to: string;
   toBalance: number;
+}
+
+/** The bank's printed totals differ from the rows it lists in this file. */
+export interface StatementTotalsNote {
+  expense: number;
+  file: string;
+  income: number;
+  rowsExpense: number;
+  rowsIncome: number;
 }
 
 interface StatementFile {
@@ -101,7 +118,9 @@ export function mergeStatements(files: StatementFile[]) {
       ordered.flatMap(({ preview }) => preview.sections.map((s) => s.key)),
     ),
   ];
+  const breaks: StatementBreak[] = [];
   const gaps: StatementGap[] = [];
+  const totalsNotes: StatementTotalsNote[] = [];
   const mismatchedKeys: string[] = [];
 
   const sections = keys.map((key) => {
@@ -128,6 +147,33 @@ export function mergeStatements(files: StatementFile[]) {
         });
       }
     });
+    for (const { name, section } of parts) {
+      if (!section.printedTotals) continue;
+      const sum = (type: StatementRowInterface["type"]) =>
+        section.rows
+          .filter((row) => row.type === type)
+          .reduce((total, row) => total + row.amount, 0);
+      totalsNotes.push({
+        ...section.printedTotals,
+        file: name,
+        rowsExpense: sum("expense"),
+        rowsIncome: sum("income"),
+      });
+    }
+    const start = parts.find(({ section }) => section.rows.length > 0);
+    const saved = start?.section.savedBalanceBefore ?? null;
+    if (
+      start &&
+      saved !== null &&
+      cents(saved) !== cents(start.section.openingBalance)
+    ) {
+      breaks.push({
+        file: start.name,
+        opening: start.section.openingBalance,
+        saved,
+        sectionKey: key,
+      });
+    }
     const masks = new Set(
       parts.flatMap(({ section }) => section.accountMask ?? []),
     );
@@ -163,5 +209,5 @@ export function mergeStatements(files: StatementFile[]) {
     };
   });
 
-  return { gaps, mismatchedKeys, preview: { sections } };
+  return { breaks, gaps, mismatchedKeys, preview: { sections }, totalsNotes };
 }

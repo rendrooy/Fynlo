@@ -309,6 +309,7 @@ export type DateRangePreset =
   | "last-30"
   | "last-90"
   | "last-month"
+  | "month-to-date"
   | "this-month"
   | "this-year";
 
@@ -424,6 +425,10 @@ export function resolveDateRange(
         ),
         range: span(new Date(year, month - 1, 1), new Date(year, month, 0)),
       };
+    case "month-to-date": {
+      const range = span(new Date(year, month, 1), today);
+      return { previous: before(range), range };
+    }
     case "this-month":
       return {
         previous: span(new Date(year, month - 1, 1), new Date(year, month, 0)),

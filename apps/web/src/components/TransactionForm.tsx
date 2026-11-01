@@ -10,8 +10,8 @@ import { type FormEvent, useState } from "react";
 import { useFinance } from "@/providers/finance-provider";
 import { ApiError } from "@/services/api";
 import { categoryOptions } from "@/utils/category-options";
-import { accountLabel } from "@/utils/finance";
-import { formatGrouped, toIsoDate } from "@/utils/format";
+import { accountBalance, accountLabel } from "@/utils/finance";
+import { formatGrouped, formatRupiah, toIsoDate } from "@/utils/format";
 
 export function TransactionForm({
   defaultType = "expense",
@@ -29,6 +29,7 @@ export function TransactionForm({
     accountsStatus,
     addTransaction,
     categories,
+    transactions,
     updateTransaction,
   } = useFinance();
   const [type, setType] = useState(editing?.type ?? defaultType);
@@ -49,6 +50,32 @@ export function TransactionForm({
   const options = categories.filter((c) => c.type === type);
   const sameAccount = isTransfer && toAccountId === accountId;
   const targetMissing = isTransfer && (!toAccountId || sameAccount);
+
+  /** The account's balance now, and with this form's amount applied. */
+  function balanceHint(id: string, change: number) {
+    const account = accounts.find((a) => a.id === id);
+    if (!account) return null;
+    const current = accountBalance(account, transactions);
+    const after =
+      accountBalance(
+        account,
+        // An edit replaces the saved amount, so it can't count twice.
+        transactions.filter((t) => t.id !== editing?.id),
+      ) + change;
+    return (
+      <span className="balance-hint">
+        Balance {formatRupiah(current)}
+        {amount > 0 && (
+          <>
+            {" → "}
+            <b className={after < 0 ? "negative" : undefined}>
+              {formatRupiah(after)}
+            </b>
+          </>
+        )}
+      </span>
+    );
+  }
 
   function changeType(next: TransactionType) {
     setType(next);
@@ -176,6 +203,7 @@ export function TransactionForm({
         <label>
           {isTransfer ? "From account" : "Account"}
           <Select
+            aria-label={isTransfer ? "From account" : "Account"}
             onChange={setAccountId}
             options={accounts.map((account) => ({
               label: accountLabel(account),
@@ -184,11 +212,13 @@ export function TransactionForm({
             placeholder="Choose an account"
             value={accountId}
           />
+          {balanceHint(accountId, type === "income" ? amount : -amount)}
         </label>
         {isTransfer ? (
           <label>
             To account
             <Select
+              aria-label="To account"
               onChange={setToAccountId}
               options={accounts
                 .filter((account) => account.id !== accountId)
@@ -199,6 +229,7 @@ export function TransactionForm({
               placeholder="Choose an account"
               value={toAccountId === accountId ? "" : toAccountId}
             />
+            {!sameAccount && balanceHint(toAccountId, amount)}
             {submitted && targetMissing && (
               <span className="field-error">
                 {accounts.length < 2

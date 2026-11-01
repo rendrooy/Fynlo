@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  adjustAccountBalanceHandler,
   createAccountHandler,
   deleteAccountHandler,
   listAccountsHandler,
@@ -75,6 +76,11 @@ router.get("/accounts", authMiddleware, listAccountsHandler);
 router.post("/accounts", authMiddleware, createAccountHandler);
 router.patch("/accounts/:id", authMiddleware, updateAccountHandler);
 router.delete("/accounts/:id", authMiddleware, deleteAccountHandler);
+router.post(
+  "/accounts/:id/adjust-balance",
+  authMiddleware,
+  adjustAccountBalanceHandler,
+);
 
 router.get("/category-groups", authMiddleware, listCategoryGroupsHandler);
 router.post("/category-groups", authMiddleware, createCategoryGroupHandler);

@@ -248,9 +248,9 @@ export async function previewStatement(
       const dates = section.rows.map((row) => row.date).sort();
       const firstDate = dates[0] ?? "1970-01-01";
       const lastDate = dates.at(-1) ?? "1970-01-01";
-      const { earlier, existing } = accountId
+      const { balanceBefore, earlier, existing } = accountId
         ? await loadAccountHistory(userId, accountId, firstDate, lastDate)
-        : { earlier: false, existing: [] };
+        : { balanceBefore: null, earlier: false, existing: [] };
 
       // Each saved transaction can cover only one row, so real look-alikes stay selected.
       const unmatched = [...existing];
@@ -283,6 +283,7 @@ export async function previewStatement(
         key: section.key,
         name: section.name,
         openingBalance: section.openingBalance,
+        printedTotals: section.printedTotals ?? null,
         rows: section.rows.map((row) => {
           const same = (item: ExistingTransaction) =>
             Number(item.amount) === row.amount && item.type === row.type;
@@ -319,6 +320,7 @@ export async function previewStatement(
             transferAccountId,
           };
         }),
+        savedBalanceBefore: section.rows.length > 0 ? balanceBefore : null,
         suggestedAccountId: accountId ?? suggestion?.id ?? null,
       };
     }),
@@ -382,7 +384,23 @@ async function loadAccountHistory(
      LIMIT 1`,
     [userId, accountId, firstDate],
   );
-  return { earlier: Boolean(rowCount), existing };
+  const { rows: saved } = await pool.query<{ balance: string }>(
+    `SELECT a.opening_balance + COALESCE(SUM(
+              CASE WHEN t.to_account_id = a.id OR t.type = 'income' THEN t.amount
+                   ELSE -t.amount END), 0) AS balance
+     FROM m_account a
+     LEFT JOIN t_transaction t
+       ON (t.account_id = a.id OR t.to_account_id = a.id) AND NOT t.is_deleted
+      AND (t.occurred_at AT TIME ZONE '${TIME_ZONE}')::date < $3::date
+     WHERE a.user_id = $1 AND a.id = $2
+     GROUP BY a.id`,
+    [userId, accountId, firstDate],
+  );
+  return {
+    balanceBefore: rowCount ? Number(saved[0]?.balance ?? 0) : null,
+    earlier: Boolean(rowCount),
+    existing,
+  };
 }
 
 /** Sent as text because the statement arrives as a file upload. */

@@ -35,7 +35,9 @@ import { balancesAfterImport, hasOtherSide } from "@/utils/statement-check";
 import {
   linkBankTransfers,
   mergeStatements,
+  type StatementBreak,
   type StatementGap,
+  type StatementTotalsNote,
 } from "@/utils/statement-merge";
 
 // Marks a dropdown value as the other side of a transfer, not a category.
@@ -102,7 +104,9 @@ export default function PageContent() {
     total: number;
   }>(null);
   const [fileResults, setFileResults] = useState<FileResult[]>([]);
+  const [breaks, setBreaks] = useState<StatementBreak[]>([]);
   const [gaps, setGaps] = useState<StatementGap[]>([]);
+  const [totalsNotes, setTotalsNotes] = useState<StatementTotalsNote[]>([]);
   const [mismatchedKeys, setMismatchedKeys] = useState<string[]>([]);
   const [password, setPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -251,7 +255,9 @@ export default function PageContent() {
     );
     setUnpaired(new Set());
     setPreview({ sections: chosenSections });
+    setBreaks(merged.breaks);
     setGaps(merged.gaps);
+    setTotalsNotes(merged.totalsNotes);
     setMismatchedKeys(merged.mismatchedKeys);
     setExcluded(
       new Set(
@@ -674,6 +680,43 @@ export default function PageContent() {
       {preview && (
         <>
           {fileList}
+          {breaks.length > 0 && (
+            <div className="import-check off" role="alert">
+              <CircleAlert aria-hidden="true" size={20} />
+              <div>
+                <b>A month may be missing from Fynlo</b>
+                <ul>
+                  {breaks.map((item) => (
+                    <li key={item.sectionKey}>
+                      {accountLabel(
+                        accountById(
+                          sections.find((s) => s.key === item.sectionKey)
+                            ?.accountId ?? null,
+                        ),
+                      )}{" "}
+                      has {formatRupiah(item.saved)} before {item.file}, but it
+                      starts at {formatRupiah(item.opening)}.
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+          {totalsNotes.map((note) => (
+            <div className="notice" key={note.file}>
+              <Info aria-hidden="true" size={20} />
+              <div>
+                <b>The bank&apos;s totals differ from its list</b>
+                <span>
+                  {note.file} prints {formatRupiah(note.income)} in and{" "}
+                  {formatRupiah(note.expense)} out, but its rows add up to{" "}
+                  {formatRupiah(note.rowsIncome)} and{" "}
+                  {formatRupiah(note.rowsExpense)}. Fynlo imports the rows, and
+                  their balances are correct.
+                </span>
+              </div>
+            </div>
+          ))}
           {gaps.map((gap) => (
             <div className="notice" key={`${gap.sectionKey}${gap.to}`}>
               <Info aria-hidden="true" size={20} />
@@ -956,10 +999,16 @@ export default function PageContent() {
             </p>
           )}
           <div className="import-actions">
-            <span className={offBalances.length > 0 ? "off" : undefined}>
+            <span
+              className={
+                offBalances.length > 0 || breaks.length > 0 ? "off" : undefined
+              }
+            >
               {offBalances.length > 0
                 ? "Some balances won't match"
-                : "Balances match"}
+                : breaks.length > 0
+                  ? "A month may be missing"
+                  : "Balances match"}
             </span>
             <Button
               kind="secondary"

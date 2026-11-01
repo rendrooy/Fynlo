@@ -4,6 +4,7 @@ import type { AssetKind } from "@fynlo/types";
 
 import { Badge } from "@fynlo/ui/components/badge";
 import { Button } from "@fynlo/ui/components/button";
+import { Modal } from "@fynlo/ui/components/modal";
 import {
   ArrowRight,
   Bike,
@@ -17,10 +18,13 @@ import {
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
+import { AdjustBalanceForm } from "@/components/AdjustBalanceForm";
 import { EmptyState } from "@/components/EmptyState";
 import { assetKinds, sourceLabels } from "@/constants";
 import { useFinance } from "@/providers/finance-provider";
+import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
 import { accountBalance, inMonth, totalBalance, totals } from "@/utils/finance";
 import { formatCompact, formatRupiah, formatSigned } from "@/utils/format";
 
@@ -37,6 +41,10 @@ const plural = (count: number, noun: string) =>
 export default function PageContent() {
   const { accounts, accountsStatus, assets, loadAccounts, transactions } =
     useFinance();
+
+  const { toast } = useTransactionSheet();
+  const [adjustingId, setAdjustingId] = useState<null | string>(null);
+  const adjusting = accounts.find((a) => a.id === adjustingId);
 
   const now = new Date();
   const month = totals(inMonth(transactions, now));
@@ -183,6 +191,13 @@ export default function PageContent() {
                   <Link2 aria-hidden="true" size={15} />
                   {sourceLabels[account.source]}
                 </span>
+                <Button
+                  aria-label={`Adjust balance of ${account.name}`}
+                  kind="ghost"
+                  onClick={() => setAdjustingId(account.id)}
+                >
+                  Adjust
+                </Button>
                 <Link
                   aria-label={`Transactions of ${account.name}`}
                   className="btn ghost"
@@ -228,6 +243,23 @@ export default function PageContent() {
           );
         })}
       </div>
+      <Modal
+        onClose={() => setAdjustingId(null)}
+        open={adjusting !== undefined}
+        title={`Adjust ${adjusting?.name ?? "Balance"}`}
+      >
+        {adjusting && (
+          <AdjustBalanceForm
+            account={adjusting}
+            key={adjusting.id}
+            onCancel={() => setAdjustingId(null)}
+            onSaved={(message) => {
+              setAdjustingId(null);
+              toast(message);
+            }}
+          />
+        )}
+      </Modal>
     </div>
   );
 }
