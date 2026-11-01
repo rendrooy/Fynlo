@@ -6,9 +6,25 @@ import {
   listAccounts,
   updateAccount,
 } from "../services/account-service";
+import { adjustAccountBalance } from "../services/balance-adjustment";
 
 const bodyOf = (request: Request) =>
   (request.body ?? {}) as Record<string, unknown>;
+
+export const adjustAccountBalanceHandler = async (
+  request: Request<{ id: string }>,
+  response: Response,
+) => {
+  response.status(201).json({
+    data: await adjustAccountBalance(
+      request.userId as string,
+      request.params.id,
+      (request.body ?? {}) as Record<string, unknown>,
+    ),
+    message: "Created",
+    status: 201,
+  });
+};
 
 export const listAccountsHandler = async (
   request: Request,

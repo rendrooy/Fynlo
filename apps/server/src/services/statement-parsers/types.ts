@@ -24,5 +24,7 @@ export interface ParsedStatementSection {
   key: string;
   name: string;
   openingBalance: number;
+  /** The bank's own totals, when they differ from the rows it lists. */
+  printedTotals?: { expense: number; income: number } | null;
   rows: ParsedStatementRow[];
 }

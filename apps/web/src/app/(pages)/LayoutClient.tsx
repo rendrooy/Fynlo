@@ -29,7 +29,7 @@ import { useMounted } from "@/hooks";
 import { useAuth } from "@/providers/auth-provider";
 import { useFinance } from "@/providers/finance-provider";
 import { useTransactionSheet } from "@/providers/transaction-sheet-provider";
-import { formatMonth } from "@/utils/format";
+import { formatMonth, monthKey } from "@/utils/format";
 
 interface NavItem {
   href: string;
@@ -44,7 +44,7 @@ const nav: NavItem[] = [
   { href: "/analytics", icon: ChartColumn, label: "Analytics" },
   { href: "/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/budgets", icon: Target, label: "Budgets" },
-  { href: "/weekly-review", icon: CircleCheck, label: "Weekly Review" },
+  { href: "/review", icon: CircleCheck, label: "Review" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -92,7 +92,11 @@ function AppShell({ children }: { children: ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
 
   const current = nav.find((item) => pathname.startsWith(item.href));
-  const pending = transactions.filter((t) => t.status === "review").length;
+  // Older ones are still on the Review page, under a wider date range.
+  const thisMonth = monthKey(new Date());
+  const pending = transactions.filter(
+    (t) => t.status === "review" && t.date.startsWith(thisMonth),
+  ).length;
   const dark = theme === "dark";
   const showAdd =
     pathname.startsWith("/dashboard") ||
@@ -125,7 +129,7 @@ function AppShell({ children }: { children: ReactNode }) {
               {!collapsed && <span>{item.label}</span>}
               {mounted &&
                 !collapsed &&
-                item.href === "/weekly-review" &&
+                item.href === "/review" &&
                 pending > 0 && <i>{pending}</i>}
             </Link>
           ))}
@@ -238,9 +242,7 @@ function AppShell({ children }: { children: ReactNode }) {
             >
               <item.icon aria-hidden="true" size={20} />
               <span>{item.label}</span>
-              {item.href === "/weekly-review" && pending > 0 && (
-                <i>{pending}</i>
-              )}
+              {item.href === "/review" && pending > 0 && <i>{pending}</i>}
             </Link>
           ))}
         </div>

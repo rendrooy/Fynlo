@@ -32,6 +32,7 @@ import {
 
 import { useAuth } from "@/providers/auth-provider";
 import {
+  adjustBalanceRequest,
   createAccountRequest,
   createAccountTypeRequest,
   createBudgetGroupRequest,
@@ -78,6 +79,10 @@ interface FinanceValue {
   accountsStatus: LoadStatus;
   accountTypes: AccountTypeInterface[];
   addTransaction: (input: TransactionInputInterface) => Promise<void>;
+  adjustBalance: (
+    id: string,
+    input: { balance: number; date: string; note: string },
+  ) => Promise<void>;
   assets: AssetInterface[];
   budgetGroups: BudgetGroupInterface[];
   budgetPeriods: BudgetPeriodInterface[];
@@ -333,6 +338,18 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const adjustBalance = useCallback(
+    async (
+      id: string,
+      input: { balance: number; date: string; note: string },
+    ) => {
+      await adjustBalanceRequest(id, input);
+      // The first adjustment also creates its category.
+      await Promise.all([loadCategories(), loadTransactions()]);
+    },
+    [loadCategories, loadTransactions],
+  );
+
   const deleteAccount = useCallback(async (id: string) => {
     await deleteAccountRequest(id);
     setAccounts((current) => current.filter((a) => a.id !== id));
@@ -453,6 +470,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       accountsStatus,
       accountTypes,
       addTransaction,
+      adjustBalance,
       assets,
       budgetGroups,
       budgetPeriods,
@@ -533,6 +551,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       renameCategoryGroup,
       transactions,
       transactionsStatus,
+      adjustBalance,
       updateAccount,
       updateCategory,
       updateTransaction,

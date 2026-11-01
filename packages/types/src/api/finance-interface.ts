@@ -157,7 +157,11 @@ export interface StatementSectionInterface {
   key: string;
   name: string;
   openingBalance: number;
+  /** The bank's own totals, when they differ from the rows it lists. */
+  printedTotals: { expense: number; income: number } | null;
   rows: StatementRowInterface[];
+  /** The account's saved balance right before this statement. Null with nothing saved before it. */
+  savedBalanceBefore: null | number;
   suggestedAccountId: null | string;
 }
 

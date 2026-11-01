@@ -10,10 +10,13 @@ import {
 } from "@/utils/finance";
 import { toIsoDate } from "@/utils/format";
 
+import { DateRangeCalendar } from "./DateRangeCalendar";
+
 export const DATE_RANGE_PRESETS: {
   label: string;
   value: DateRangePreset;
 }[] = [
+  { label: "Month to date", value: "month-to-date" },
   { label: "This month", value: "this-month" },
   { label: "Last month", value: "last-month" },
   { label: "Last 30 days", value: "last-30" },
@@ -94,7 +97,7 @@ export function DateRangeFilter({
       {open && (
         <div
           aria-label="Date range"
-          className="date-filter-panel"
+          className={`date-filter-panel ${preset === "custom" ? "with-calendar" : ""}`}
           role="dialog"
         >
           <div className="date-filter-options">
@@ -114,32 +117,14 @@ export function DateRangeFilter({
             ))}
           </div>
           {preset === "custom" && (
-            <div className="date-filter-custom">
-              <label>
-                From
-                <input
-                  aria-label="From date"
-                  onChange={(event) =>
-                    event.target.value &&
-                    onCustomChange({ ...custom, from: event.target.value })
-                  }
-                  type="date"
-                  value={custom.from}
-                />
-              </label>
-              <label>
-                To
-                <input
-                  aria-label="To date"
-                  onChange={(event) =>
-                    event.target.value &&
-                    onCustomChange({ ...custom, to: event.target.value })
-                  }
-                  type="date"
-                  value={custom.to}
-                />
-              </label>
-            </div>
+            <DateRangeCalendar
+              onChange={(next) => {
+                onCustomChange(next);
+                setOpen(false);
+                trigger.current?.focus();
+              }}
+              range={custom}
+            />
           )}
         </div>
       )}
