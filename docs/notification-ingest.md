@@ -1,6 +1,6 @@
 # Notifikasi iPhone ke Fynlo
 
-Status: **sudah dibangun**: API (`POST /v1/ingest/notification`) dan konfirmasi lewat import statement. Panduan Shortcut belum.
+Status: **sudah dibangun**: API (`POST /v1/ingest/notification`), konfirmasi lewat import statement, dan panduan Shortcut (`docs/iphone-shortcut.md`).
 
 Shortcut di iPhone mengirim teks notifikasi bank ke Fynlo. Fynlo mengubahnya menjadi transaksi yang menunggu di Review. Fitur ini berdampingan dengan ingest Gmail (`docs/gmail-ingest.md`) dan memakai ulang token, log pesan, serta aturan pencocokannya. Bagian yang baru hanyalah cara membaca teks notifikasinya.
 
@@ -171,7 +171,7 @@ Konfirmasi lewat import statement juga sudah. Baris statement yang cocok dengan 
 
 Notifikasi yang tidak ada di statement muncul sebagai pemberitahuan di bagian akun tersebut.
 
-Belum: panduan Shortcut.
+Panduan Shortcut ada di `docs/iphone-shortcut.md`.
 
 - `ingest-parsers/notification.ts`: parser untuk format-format di atas, dengan tes untuk setiap contoh.
 - `ingest-service.ts`: `ingestNotification()` di samping `ingestMessage()`. Pesan disimpan ke `t_ingest_event` dengan `source = 'notification'` (tabelnya sudah mengizinkan), `sender` = `source` (`jago`/`bni`), dan `subject` = baris pertama `msg`.
