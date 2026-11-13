@@ -369,3 +369,11 @@ button.calendar-day[aria-pressed="true"]{background:rgba(5,150,105,.1);box-shado
 .adjust-current b{font-size:15px;color:var(--text)}
 .manage-foot{gap:6px;flex-wrap:wrap}
 .manage-foot>span{margin-right:auto}
+.import-bulk-start{display:flex;justify-content:flex-end;margin-bottom:12px}
+.import-bulk{position:sticky;top:90px;z-index:6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;background:var(--surface);border:1px solid var(--primary);border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.14)}
+.import-bulk>b{font-size:13px;white-space:nowrap}
+.import-bulk-category{width:240px}
+.import-bulk>span{flex-basis:100%;font-size:11px;color:var(--muted)}
+.import-row.picked{background:rgba(5,150,105,.08)}
+.import-row>input.import-pick{accent-color:#0284c7}
+@media(max-width:800px){.import-bulk{top:72px}.import-bulk-category{width:auto;flex:1;min-width:160px}.import-bulk>span{display:none}}
