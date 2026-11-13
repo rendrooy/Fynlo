@@ -108,10 +108,24 @@ export interface IngestTokenInterface {
 export interface StatementImportInterface {
   sections: {
     accountId: string;
+    /** Notification transactions this statement confirms, with the statement's details. */
+    confirmations?: {
+      categoryId: null | string;
+      date: string;
+      detail: string;
+      name: string;
+      time: string;
+      transactionId: string;
+    }[];
     openingBalance: null | number;
     rows: Omit<
       StatementRowInterface,
-      "isDuplicate" | "isMirror" | "isPossibleTransfer" | "isSuggested" | "pairKey"
+      | "confirmsTransactionId"
+      | "isDuplicate"
+      | "isMirror"
+      | "isPossibleTransfer"
+      | "isSuggested"
+      | "pairKey"
     >[];
   }[];
 }
@@ -123,6 +137,8 @@ export interface StatementPreviewInterface {
 export interface StatementRowInterface {
   amount: number;
   categoryId: null | string;
+  /** A notification already recorded this row. Importing confirms it instead of adding another. */
+  confirmsTransactionId: null | string;
   date: string;
   detail: string;
   isDuplicate: boolean;
@@ -163,6 +179,14 @@ export interface StatementSectionInterface {
   /** The account's saved balance right before this statement. Null with nothing saved before it. */
   savedBalanceBefore: null | number;
   suggestedAccountId: null | string;
+  /** Notification transactions in this period that no statement row confirms. */
+  unconfirmed: {
+    amount: number;
+    date: string;
+    id: string;
+    name: string;
+    type: string;
+  }[];
 }
 
 export interface TransactionInputInterface {

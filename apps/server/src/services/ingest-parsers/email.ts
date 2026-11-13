@@ -9,6 +9,8 @@ export interface ParsedBankMessage {
   /** Charged on top of the amount, recorded as its own expense. */
   fee: number;
   reference: null | string;
+  /** Pocket the message names, which picks the account before the number does. */
+  sourceName?: string;
   /** Visible digits of the account the money left or entered. */
   sourceNumber: string;
   /** HH:mm:ss in Jakarta time. */

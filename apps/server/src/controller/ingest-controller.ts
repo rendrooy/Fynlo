@@ -4,6 +4,7 @@ import {
   createIngestToken,
   findUserByIngestToken,
   ingestMessage,
+  ingestNotification,
   listIngestEvents,
   listIngestTokens,
   retryIngestEvent,
@@ -31,6 +32,17 @@ export const ingestAuthMiddleware = async (
 export const ingestHandler = async (request: Request, response: Response) => {
   response.status(200).json({
     data: await ingestMessage(request.userId as string, bodyOf(request)),
+    message: "OK",
+    status: 200,
+  });
+};
+
+export const ingestNotificationHandler = async (
+  request: Request,
+  response: Response,
+) => {
+  response.status(200).json({
+    data: await ingestNotification(request.userId as string, bodyOf(request)),
     message: "OK",
     status: 200,
   });

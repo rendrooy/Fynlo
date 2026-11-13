@@ -172,6 +172,7 @@ Then sign in and try each of these:
 - Add and delete a transaction.
 - Import a statement PDF.
 - Follow `docs/gmail-ingest.md`, using `https://IP_VPS.sslip.io/v1` as the API address.
+- Follow `docs/iphone-shortcut.md` to send bank notifications from an iPhone.
 
 ## Updating
 

@@ -17,6 +17,7 @@ import {
   ChevronDown,
   CircleAlert,
   Info,
+  ListChecks,
   Plus,
   Upload,
 } from "lucide-react";
@@ -125,6 +126,11 @@ export default function PageContent() {
     null,
   );
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // Rows picked to get one category together, apart from which rows get imported.
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [lastPicked, setLastPicked] = useState<null | string>(null);
+  const [bulkCategory, setBulkCategory] = useState("");
   const [chosenCategories, setChosenCategories] = useState<
     Record<string, string>
   >({});
@@ -183,6 +189,10 @@ export default function PageContent() {
   };
   const allRows = sections.flatMap(rowsOf);
   const selected = allRows.filter((row) => !excluded.has(row.key));
+  // A row left out because a notification already recorded it confirms that one instead.
+  const isConfirming = (row: (typeof allRows)[number]) =>
+    row.confirmsTransactionId !== null && excluded.has(row.key);
+  const confirming = allRows.filter(isConfirming);
   const income = selected
     .filter((row) => row.type === "income" && !row.transferAccountId)
     .reduce((sum, row) => sum + row.amount, 0);
@@ -338,13 +348,23 @@ export default function PageContent() {
   }
 
   async function save() {
-    if (selected.length === 0) return;
+    if (selected.length === 0 && confirming.length === 0) return;
     setError("");
     setBusy(true);
     try {
       await importStatement({
         sections: sections.map((section) => ({
           accountId: section.accountId as string,
+          confirmations: rowsOf(section)
+            .filter(isConfirming)
+            .map((row) => ({
+              categoryId: row.categoryId,
+              date: row.date,
+              detail: row.detail,
+              name: row.name,
+              time: row.time,
+              transactionId: row.confirmsTransactionId as string,
+            })),
           openingBalance: openingKeys.has(section.key)
             ? section.openingBalance
             : null,
@@ -362,12 +382,64 @@ export default function PageContent() {
             })),
         })),
       });
-      toast(`${selected.length} transactions imported`);
+      toast(
+        `${selected.length} transactions imported` +
+          (confirming.length
+            ? `, ${confirming.length} from notifications confirmed`
+            : ""),
+      );
       router.push("/transactions");
     } catch (caught) {
       setError(errorText(caught));
       setBusy(false);
     }
+  }
+
+  /** Shift-click picks every row between this one and the last one picked. */
+  function pick(key: string, isRange: boolean) {
+    const next = new Set(picked);
+    const keys = allRows.map((row) => row.key);
+    const from = lastPicked ? keys.indexOf(lastPicked) : -1;
+    const to = keys.indexOf(key);
+    if (isRange && from >= 0) {
+      const add = !picked.has(key);
+      for (const k of keys.slice(Math.min(from, to), Math.max(from, to) + 1)) {
+        if (add) next.add(k);
+        else next.delete(k);
+      }
+    } else if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    setPicked(next);
+    setLastPicked(key);
+  }
+
+  function applyBulkCategory() {
+    const category = categories.find((c) => c.id === bulkCategory);
+    if (!category) return;
+    const rows = allRows.filter((row) => picked.has(row.key));
+    const fitting = rows.filter((row) => row.type === category.type);
+    setChosenCategories((current) => ({
+      ...current,
+      ...Object.fromEntries(fitting.map((row) => [row.key, category.id])),
+    }));
+    const skipped = rows.length - fitting.length;
+    toast(
+      `${category.name} set on ${fitting.length} ${fitting.length === 1 ? "row" : "rows"}` +
+        (skipped
+          ? `, ${skipped} skipped because ${category.type === "expense" ? "they're income" : "they're expenses"}`
+          : ""),
+    );
+    setPicked(new Set());
+    setLastPicked(null);
+  }
+
+  function stopPicking() {
+    setPicking(false);
+    setPicked(new Set());
+    setLastPicked(null);
   }
 
   function toggle(key: string) {
@@ -769,6 +841,55 @@ export default function PageContent() {
               )}
             </div>
           </div>
+          {picking ? (
+            <div
+              aria-label="Categorize several rows"
+              className="import-bulk"
+              role="toolbar"
+            >
+              <b>
+                {picked.size} {picked.size === 1 ? "row" : "rows"} selected
+              </b>
+              <div className="import-bulk-category">
+                <Select
+                  aria-label="Category for selected rows"
+                  onChange={setBulkCategory}
+                  options={categoryOptions(categories)}
+                  placeholder="Choose a category"
+                  value={bulkCategory}
+                />
+              </div>
+              <Button
+                disabled={picked.size === 0 || !bulkCategory}
+                onClick={applyBulkCategory}
+              >
+                Apply
+              </Button>
+              <Button
+                kind="ghost"
+                onClick={() =>
+                  setPicked(
+                    picked.size === allRows.length
+                      ? new Set()
+                      : new Set(allRows.map((row) => row.key)),
+                  )
+                }
+              >
+                {picked.size === allRows.length ? "Clear" : "Select all"}
+              </Button>
+              <Button kind="secondary" onClick={stopPicking}>
+                Done
+              </Button>
+              <span>Shift-click to select a range.</span>
+            </div>
+          ) : (
+            <div className="import-bulk-start">
+              <Button kind="secondary" onClick={() => setPicking(true)}>
+                <ListChecks aria-hidden="true" size={16} />
+                Categorize Several
+              </Button>
+            </div>
+          )}
           <div className="card import-summary">
             <div>
               <span>Selected</span>
@@ -854,6 +975,30 @@ export default function PageContent() {
                       </div>
                     </div>
                   )}
+                  {section.unconfirmed.length > 0 && (
+                    <div className="notice mb-4">
+                      <Info aria-hidden="true" size={20} />
+                      <div>
+                        <b>
+                          {section.unconfirmed.length}{" "}
+                          {section.unconfirmed.length === 1
+                            ? "notification isn't"
+                            : "notifications aren't"}{" "}
+                          on this statement
+                        </b>
+                        <span>
+                          {section.unconfirmed
+                            .map(
+                              (item) =>
+                                `${item.name} ${formatRupiah(item.amount)} (${formatDayShort(item.date)})`,
+                            )
+                            .join(", ")}
+                          . They may have been cancelled. Check them in
+                          Transactions.
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   {section.canSetOpeningBalance && (
                     <label className="import-opening">
                       <input
@@ -907,13 +1052,27 @@ export default function PageContent() {
                         );
                       }
                       return (
-                        <div className="manage-row import-row" key={row.key}>
-                          <input
-                            aria-label={`Import ${row.name}`}
-                            checked={!excluded.has(row.key)}
-                            onChange={() => toggle(row.key)}
-                            type="checkbox"
-                          />
+                        <div
+                          className={`manage-row import-row ${picking && picked.has(row.key) ? "picked" : ""}`}
+                          key={row.key}
+                        >
+                          {picking ? (
+                            <input
+                              aria-label={`Select ${row.name}`}
+                              checked={picked.has(row.key)}
+                              className="import-pick"
+                              onChange={() => undefined}
+                              onClick={(event) => pick(row.key, event.shiftKey)}
+                              type="checkbox"
+                            />
+                          ) : (
+                            <input
+                              aria-label={`Import ${row.name}`}
+                              checked={!excluded.has(row.key)}
+                              onChange={() => toggle(row.key)}
+                              type="checkbox"
+                            />
+                          )}
                           <div className="manage-copy">
                             <b>{row.name}</b>
                             <span>
@@ -921,9 +1080,15 @@ export default function PageContent() {
                               {row.detail && ` · ${row.detail}`}
                             </span>
                           </div>
-                          {row.isDuplicate && (
-                            <Badge tone="warning">Possible duplicate</Badge>
-                          )}
+                          {row.isDuplicate &&
+                            (row.confirmsTransactionId &&
+                            excluded.has(row.key) ? (
+                              <Badge tone="success">
+                                Confirms notification
+                              </Badge>
+                            ) : (
+                              <Badge tone="warning">Possible duplicate</Badge>
+                            ))}
                           {!excluded.has(row.key) &&
                             (() => {
                               const other = sections.find(
@@ -1020,10 +1185,16 @@ export default function PageContent() {
               Back
             </Button>
             <Button
-              disabled={busy || selected.length === 0}
+              disabled={
+                busy || (selected.length === 0 && confirming.length === 0)
+              }
               onClick={() => void save()}
             >
-              {busy ? "Importing..." : `Import ${selected.length} Transactions`}
+              {busy
+                ? "Importing..."
+                : selected.length === 0
+                  ? `Confirm ${confirming.length} Transactions`
+                  : `Import ${selected.length} Transactions`}
             </Button>
           </div>
         </>

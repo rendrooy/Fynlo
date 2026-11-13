@@ -1,3 +1,5 @@
+import type { PoolClient } from "pg";
+
 import type {
   ParsedStatementRow,
   ParsedStatementSection,
@@ -7,6 +9,7 @@ import { pool } from "../connection/db";
 import { HttpError } from "../utils/http-error";
 import { isUuid } from "../utils/validation";
 import { loadCategoryGuesser } from "./category-guess";
+import { PLACEHOLDER_NAMES } from "./ingest-parsers/notification";
 import { isBniStatement, parseBni } from "./statement-parsers/bni";
 import { isJagoStatement, parseJago } from "./statement-parsers/jago";
 import { readPdfText } from "./statement-parsers/pdf-text";
@@ -46,12 +49,24 @@ const KEYWORDS: { category: string; words: string[] }[] = [
 
 const invalid = (message: string) => new HttpError(400, message);
 
+/** A row that a notification already recorded, now confirmed by the statement. */
+interface Confirmation {
+  categoryId: null | string;
+  detail: null | string;
+  name: string;
+  occurredAt: string;
+  transactionId: string;
+}
+
 interface ExistingTransaction {
   amount: string;
   at: string;
   day: string;
+  id: string;
   is_transfer: boolean;
+  name: string;
   source: string;
+  status: string;
   type: string;
 }
 
@@ -89,8 +104,13 @@ export async function importStatement(
       if (!Array.isArray(section.rows)) {
         throw invalid("Choose at least one transaction to import");
       }
+      const confirmations = section.confirmations ?? [];
+      if (!Array.isArray(confirmations)) {
+        throw invalid("Choose a valid transaction to confirm");
+      }
       return {
         accountId: await parseOwnedAccount(userId, section.accountId),
+        confirmations: confirmations.map(parseConfirmation),
         opening: opening as null | number,
         rows: section.rows.map(parseImportRow),
       };
@@ -103,7 +123,13 @@ export async function importStatement(
   const rows = sections.flatMap((section) =>
     section.rows.map((row) => ({ ...row, accountId: section.accountId })),
   );
-  if (rows.length === 0) {
+  const confirmations = sections.flatMap((section) =>
+    section.confirmations.map((item) => ({
+      ...item,
+      accountId: section.accountId,
+    })),
+  );
+  if (rows.length === 0 && confirmations.length === 0) {
     throw invalid("Choose at least one transaction to import");
   }
   if (rows.length > MAX_ROWS) {
@@ -111,7 +137,9 @@ export async function importStatement(
   }
 
   // A category must belong to this user and match the row's direction.
-  const chosen = [...new Set(rows.flatMap((r) => r.categoryId ?? []))];
+  const chosen = [
+    ...new Set([...rows, ...confirmations].flatMap((r) => r.categoryId ?? [])),
+  ];
   if (!chosen.every(isUuid)) throw invalid("Choose a valid category");
   const { rows: categories } = await pool.query<{ id: string; type: string }>(
     `SELECT id, type FROM m_category
@@ -173,6 +201,9 @@ export async function importStatement(
         rows.map((r) => r.transferAccountId),
       ],
     );
+    for (const item of confirmations) {
+      await confirmNotification(client, userId, item, typeOf);
+    }
     for (const section of sections) {
       if (section.opening === null) continue;
       await client.query(
@@ -188,7 +219,7 @@ export async function importStatement(
   } finally {
     client.release();
   }
-  return { imported: rows.length };
+  return { confirmed: confirmations.length, imported: rows.length };
 }
 
 export async function previewStatement(
@@ -256,9 +287,8 @@ export async function previewStatement(
       const unmatched = [...existing];
       const takeMatch = (matches: (item: ExistingTransaction) => boolean) => {
         const index = unmatched.findIndex(matches);
-        if (index < 0) return false;
-        unmatched.splice(index, 1);
-        return true;
+        if (index < 0) return null;
+        return unmatched.splice(index, 1)[0] ?? null;
       };
 
       const suggestion = accounts.find(
@@ -287,18 +317,24 @@ export async function previewStatement(
         rows: section.rows.map((row) => {
           const same = (item: ExistingTransaction) =>
             Number(item.amount) === row.amount && item.type === row.type;
-          const isDuplicate =
+          const match =
             takeMatch(
               (item) => same(item) && item.at === `${row.date} ${row.time}`,
-            ) ||
-            // Manual entries and the other side of a transfer have a different
-            // time or none, so the day has to be enough.
+            ) ??
+            // Manual entries, notifications and the other side of a transfer have a
+            // different time or none, so the day has to be enough.
             takeMatch(
               (item) =>
                 same(item) &&
                 (item.source !== "import" || item.is_transfer) &&
                 item.day === row.date,
             );
+          const isDuplicate = match !== null;
+          // Importing confirms what a notification recorded, instead of adding it again.
+          const confirmsTransactionId =
+            match?.source === "shortcut" && match.status === "review"
+              ? match.id
+              : null;
           const transferAccountId =
             (row.counterpart && accountOfPocket.get(row.counterpart)) || null;
           const { counterpart, ...fields } = row;
@@ -313,6 +349,7 @@ export async function previewStatement(
           return {
             ...fields,
             categoryId,
+            confirmsTransactionId,
             isDuplicate,
             isMirror: mirrors.has(row),
             isPossibleTransfer,
@@ -322,10 +359,70 @@ export async function previewStatement(
         }),
         savedBalanceBefore: section.rows.length > 0 ? balanceBefore : null,
         suggestedAccountId: accountId ?? suggestion?.id ?? null,
+        // Read after the rows above took their matches. A notification the statement
+        // doesn't show may have been cancelled, so the user gets to look at it.
+        unconfirmed: unmatched
+          .filter(
+            (item) => item.source === "shortcut" && item.status === "review",
+          )
+          .map((item) => ({
+            amount: Number(item.amount),
+            date: item.day,
+            id: item.id,
+            name: item.name,
+            type: item.type,
+          })),
       };
     }),
   );
   return { sections };
+}
+
+/**
+ * The statement has the real time, and a real name where the notification had none.
+ * A category already chosen stays. Without one, it's still waiting in Review.
+ */
+async function confirmNotification(
+  client: PoolClient,
+  userId: string,
+  item: Confirmation & { accountId: string },
+  typeOf: Map<string, string>,
+) {
+  const { rows } = await client.query<{ type: string }>(
+    `SELECT CASE WHEN type <> 'transfer' THEN type END AS type
+     FROM t_transaction
+     WHERE id = $1 AND user_id = $2 AND source = 'shortcut' AND NOT is_deleted
+       AND (account_id = $3 OR to_account_id = $3)
+     FOR UPDATE`,
+    [item.transactionId, userId, item.accountId],
+  );
+  const found = rows[0];
+  if (!found) throw invalid("A transaction to confirm wasn't found");
+  // A notification paired into a transfer keeps having no category.
+  const categoryId = found.type ? item.categoryId : null;
+  if (categoryId && typeOf.get(categoryId) !== found.type) {
+    throw invalid("Choose a valid category");
+  }
+  await client.query(
+    `UPDATE t_transaction
+     SET occurred_at = $3::timestamp AT TIME ZONE '${TIME_ZONE}',
+         name = CASE WHEN name = ANY($4::text[]) THEN $5 ELSE name END,
+         detail = CASE WHEN name = ANY($4::text[]) THEN $6 ELSE detail END,
+         category_id = COALESCE(category_id, $7),
+         status = CASE WHEN type = 'transfer' OR COALESCE(category_id, $7) IS NOT NULL
+                       THEN 'verified' ELSE status END,
+         updated_time = now()
+     WHERE id = $1 AND user_id = $2`,
+    [
+      item.transactionId,
+      userId,
+      item.occurredAt,
+      PLACEHOLDER_NAMES,
+      item.name,
+      item.detail,
+      categoryId,
+    ],
+  );
 }
 
 /** A move between two chosen pockets appears in both. The incoming side is the one to hide. */
@@ -367,7 +464,7 @@ async function loadAccountHistory(
 ) {
   const { rows: existing } = await pool.query<ExistingTransaction>(
     // A transfer counts as money out of its source and into its destination.
-    `SELECT amount, source, type = 'transfer' AS is_transfer,
+    `SELECT id, amount, name, source, status, type = 'transfer' AS is_transfer,
             CASE WHEN type <> 'transfer' THEN type
                  WHEN account_id = $2 THEN 'expense' ELSE 'income' END AS type,
             to_char(occurred_at AT TIME ZONE '${TIME_ZONE}', 'YYYY-MM-DD HH24:MI:SS') AS at,
@@ -424,6 +521,19 @@ async function parseAccountMap(userId: string, value: unknown) {
     throw invalid("Choose a different account for each pocket");
   }
   return map;
+}
+
+function parseConfirmation(item: Record<string, unknown>): Confirmation {
+  if (!isUuid(item.transactionId)) {
+    throw invalid("Choose a valid transaction to confirm");
+  }
+  return {
+    categoryId: item.categoryId ? String(item.categoryId) : null,
+    detail: parseDetail(item.detail),
+    name: parseName(item.name),
+    occurredAt: parseOccurredAt(item.date, item.time),
+    transactionId: item.transactionId,
+  };
 }
 
 function parseImportRow(row: Record<string, unknown>) {
