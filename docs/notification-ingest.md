@@ -1,6 +1,6 @@
 # Notifikasi iPhone ke Fynlo
 
-Status: **API sudah dibangun** (`POST /v1/ingest/notification`). Konfirmasi lewat import statement belum.
+Status: **sudah dibangun**: API (`POST /v1/ingest/notification`) dan konfirmasi lewat import statement. Panduan Shortcut belum.
 
 Shortcut di iPhone mengirim teks notifikasi bank ke Fynlo. Fynlo mengubahnya menjadi transaksi yang menunggu di Review. Fitur ini berdampingan dengan ingest Gmail (`docs/gmail-ingest.md`) dan memakai ulang token, log pesan, serta aturan pencocokannya. Bagian yang baru hanyalah cara membaca teks notifikasinya.
 
@@ -163,7 +163,15 @@ Sama seperti di tempat lain: tebak dari riwayat (nama + detail), lalu dari kata 
 
 Sudah: parser, `ingestNotification()`, route, pencocokan akun, dan pasangan transfer antar akun sendiri. Pesan disimpan dengan `sender` = `source:account` (misalnya `jago:2734`) supaya Retry tetap tahu bank dan akunnya. Pesan notifikasi sudah ikut tampil di **Settings → Automation → Recent messages** bersama pesan email.
 
-Belum: konfirmasi lewat import statement (`statement-service.ts`) dan panduan Shortcut.
+Konfirmasi lewat import statement juga sudah. Baris statement yang cocok dengan transaksi notifikasi berstatus `review` diberi badge **Confirms notification** dan tidak diimport ulang. Saat import:
+- jam diganti dengan jam dari statement;
+- nama placeholder (`BNI`, `GoPay`, `GoPay Tabungan`, `Kartu debit Jago`) diganti dengan nama dari statement;
+- kategori yang sudah ada tetap dipakai, dan kalau belum ada, diisi dari baris statement;
+- status menjadi `verified` kalau sudah punya kategori atau berupa transfer.
+
+Notifikasi yang tidak ada di statement muncul sebagai pemberitahuan di bagian akun tersebut.
+
+Belum: panduan Shortcut.
 
 - `ingest-parsers/notification.ts`: parser untuk format-format di atas, dengan tes untuk setiap contoh.
 - `ingest-service.ts`: `ingestNotification()` di samping `ingestMessage()`. Pesan disimpan ke `t_ingest_event` dengan `source = 'notification'` (tabelnya sudah mengizinkan), `sender` = `source` (`jago`/`bni`), dan `subject` = baris pertama `msg`.

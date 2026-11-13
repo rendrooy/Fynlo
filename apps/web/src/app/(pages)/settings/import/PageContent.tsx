@@ -189,6 +189,10 @@ export default function PageContent() {
   };
   const allRows = sections.flatMap(rowsOf);
   const selected = allRows.filter((row) => !excluded.has(row.key));
+  // A row left out because a notification already recorded it confirms that one instead.
+  const isConfirming = (row: (typeof allRows)[number]) =>
+    row.confirmsTransactionId !== null && excluded.has(row.key);
+  const confirming = allRows.filter(isConfirming);
   const income = selected
     .filter((row) => row.type === "income" && !row.transferAccountId)
     .reduce((sum, row) => sum + row.amount, 0);
@@ -344,13 +348,23 @@ export default function PageContent() {
   }
 
   async function save() {
-    if (selected.length === 0) return;
+    if (selected.length === 0 && confirming.length === 0) return;
     setError("");
     setBusy(true);
     try {
       await importStatement({
         sections: sections.map((section) => ({
           accountId: section.accountId as string,
+          confirmations: rowsOf(section)
+            .filter(isConfirming)
+            .map((row) => ({
+              categoryId: row.categoryId,
+              date: row.date,
+              detail: row.detail,
+              name: row.name,
+              time: row.time,
+              transactionId: row.confirmsTransactionId as string,
+            })),
           openingBalance: openingKeys.has(section.key)
             ? section.openingBalance
             : null,
@@ -368,7 +382,12 @@ export default function PageContent() {
             })),
         })),
       });
-      toast(`${selected.length} transactions imported`);
+      toast(
+        `${selected.length} transactions imported` +
+          (confirming.length
+            ? `, ${confirming.length} from notifications confirmed`
+            : ""),
+      );
       router.push("/transactions");
     } catch (caught) {
       setError(errorText(caught));
@@ -956,6 +975,30 @@ export default function PageContent() {
                       </div>
                     </div>
                   )}
+                  {section.unconfirmed.length > 0 && (
+                    <div className="notice mb-4">
+                      <Info aria-hidden="true" size={20} />
+                      <div>
+                        <b>
+                          {section.unconfirmed.length}{" "}
+                          {section.unconfirmed.length === 1
+                            ? "notification isn't"
+                            : "notifications aren't"}{" "}
+                          on this statement
+                        </b>
+                        <span>
+                          {section.unconfirmed
+                            .map(
+                              (item) =>
+                                `${item.name} ${formatRupiah(item.amount)} (${formatDayShort(item.date)})`,
+                            )
+                            .join(", ")}
+                          . They may have been cancelled. Check them in
+                          Transactions.
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   {section.canSetOpeningBalance && (
                     <label className="import-opening">
                       <input
@@ -1037,9 +1080,15 @@ export default function PageContent() {
                               {row.detail && ` · ${row.detail}`}
                             </span>
                           </div>
-                          {row.isDuplicate && (
-                            <Badge tone="warning">Possible duplicate</Badge>
-                          )}
+                          {row.isDuplicate &&
+                            (row.confirmsTransactionId &&
+                            excluded.has(row.key) ? (
+                              <Badge tone="success">
+                                Confirms notification
+                              </Badge>
+                            ) : (
+                              <Badge tone="warning">Possible duplicate</Badge>
+                            ))}
                           {!excluded.has(row.key) &&
                             (() => {
                               const other = sections.find(
@@ -1136,10 +1185,16 @@ export default function PageContent() {
               Back
             </Button>
             <Button
-              disabled={busy || selected.length === 0}
+              disabled={
+                busy || (selected.length === 0 && confirming.length === 0)
+              }
               onClick={() => void save()}
             >
-              {busy ? "Importing..." : `Import ${selected.length} Transactions`}
+              {busy
+                ? "Importing..."
+                : selected.length === 0
+                  ? `Confirm ${confirming.length} Transactions`
+                  : `Import ${selected.length} Transactions`}
             </Button>
           </div>
         </>

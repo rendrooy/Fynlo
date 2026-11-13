@@ -14,6 +14,14 @@ export type NotificationSource = (typeof NOTIFICATION_SOURCES)[number];
 /** BNI's short notices don't say where the money went, so the statement fills it in later. */
 export const UNNAMED_DETAIL = "wondr notification";
 
+/** Names given when a notification doesn't say who was paid. The statement's name replaces them. */
+export const PLACEHOLDER_NAMES = [
+  "BNI",
+  "GoPay",
+  "GoPay Tabungan",
+  "Kartu debit Jago",
+];
+
 const AMOUNT = String.raw`Rp\.?\s?(\d[\d.]*(?:,\d{1,2})?)`;
 
 const failed = (reason: string): ParseResult => ({ reason, status: "failed" });
