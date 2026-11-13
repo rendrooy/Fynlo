@@ -36,6 +36,7 @@ import {
   createIngestTokenHandler,
   ingestAuthMiddleware,
   ingestHandler,
+  ingestNotificationHandler,
   listIngestEventsHandler,
   listIngestTokensHandler,
   retryIngestEventHandler,
@@ -101,6 +102,12 @@ router.patch("/categories/:id", authMiddleware, updateCategoryHandler);
 router.delete("/categories/:id", authMiddleware, deleteCategoryHandler);
 
 router.post("/ingest", ingestRateLimit, ingestAuthMiddleware, ingestHandler);
+router.post(
+  "/ingest/notification",
+  ingestRateLimit,
+  ingestAuthMiddleware,
+  ingestNotificationHandler,
+);
 router.get("/ingest/events", authMiddleware, listIngestEventsHandler);
 router.post(
   "/ingest/events/:id/retry",
